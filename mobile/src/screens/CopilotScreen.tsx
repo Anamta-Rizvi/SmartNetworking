@@ -8,7 +8,8 @@ import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { Alert } from 'react-native';
 import { Colors } from '../constants/colors';
-import { streamCopilotChat, CopilotMode, Message } from '../api/copilot';
+import { streamCopilotChat, CopilotMode, Message, EventSuggestion } from '../api/copilot';
+import { addGoalEvent } from '../api/dashboard';
 import { API_BASE } from '../api/client';
 import { useStore } from '../store/useStore';
 
@@ -19,14 +20,18 @@ const MODES: { key: CopilotMode; label: string; emoji: string; desc: string }[] 
   { key: 'elevator_pitch', emoji: '🚀', label: 'Elevator Pitch', desc: '30-sec pitch' },
   { key: 'icebreaker', emoji: '💬', label: 'Icebreaker', desc: 'Social starters' },
   { key: 'followup', emoji: '📩', label: 'Follow-Up', desc: 'After meeting someone' },
+  { key: 'progress_review', emoji: '📊', label: 'Progress', desc: 'Review your goals' },
 ];
 
-export function CopilotScreen() {
+export function CopilotScreen({ route }: any) {
   const userId = useStore(s => s.userId);
-  const [mode, setMode] = useState<CopilotMode>('goal_setup');
+  const initialMode: CopilotMode = route?.params?.initialMode ?? 'goal_setup';
+  const [mode, setMode] = useState<CopilotMode>(initialMode);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
+  const [pendingSuggestion, setPendingSuggestion] = useState<EventSuggestion | null>(null);
+  const [suggestionAdded, setSuggestionAdded] = useState(false);
 
   // Voice
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -39,6 +44,8 @@ export function CopilotScreen() {
 
   useEffect(() => {
     setMessages([]);
+    setPendingSuggestion(null);
+    setSuggestionAdded(false);
     Speech.stop();
   }, [mode]);
 
@@ -150,7 +157,28 @@ export function CopilotScreen() {
         setStreaming(false);
         if (ttsEnabled && fullResponse) speakText(fullResponse);
       },
+      (suggestion) => {
+        setPendingSuggestion(suggestion);
+        setSuggestionAdded(false);
+      },
     );
+  }
+
+  async function handleAddSuggestion() {
+    if (!pendingSuggestion || !userId) return;
+    try {
+      await addGoalEvent(
+        userId,
+        pendingSuggestion.event_id,
+        'career',
+        0.3,
+        pendingSuggestion.contribution_label,
+        'copilot',
+      );
+      setSuggestionAdded(true);
+    } catch {
+      Alert.alert('Error', 'Could not add event to dashboard.');
+    }
   }
 
   const selectedMode = MODES.find(m => m.key === mode)!;
@@ -243,6 +271,29 @@ export function CopilotScreen() {
               </View>
             )}
           />
+        )}
+
+        {pendingSuggestion && (
+          <View style={styles.suggestionCard}>
+            <Text style={styles.suggestionHeader}>🎯 Copilot suggests for your goal</Text>
+            <Text style={styles.suggestionTitle} numberOfLines={1}>{pendingSuggestion.title}</Text>
+            <Text style={styles.suggestionMeta}>
+              {pendingSuggestion.location} · {new Date(pendingSuggestion.starts_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+            </Text>
+            <Text style={styles.suggestionLabel}>{pendingSuggestion.contribution_label}</Text>
+            {suggestionAdded ? (
+              <Text style={styles.suggestionDone}>✓ Added to your dashboard</Text>
+            ) : (
+              <View style={styles.suggestionActions}>
+                <TouchableOpacity style={styles.suggestionAddBtn} onPress={handleAddSuggestion}>
+                  <Text style={styles.suggestionAddText}>Add to Dashboard</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setPendingSuggestion(null)}>
+                  <Text style={styles.suggestionDismiss}>Dismiss</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         )}
 
         <View style={styles.inputRow}>
@@ -362,4 +413,19 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: { backgroundColor: Colors.surface },
   sendIcon: { color: '#fff', fontSize: 18, fontWeight: '700' },
+
+  suggestionCard: {
+    marginHorizontal: 16, marginBottom: 8,
+    backgroundColor: Colors.card, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: Colors.primary,
+  },
+  suggestionHeader: { color: Colors.primaryLight, fontSize: 11, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  suggestionTitle: { color: Colors.text, fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  suggestionMeta: { color: Colors.subtext, fontSize: 12, marginBottom: 4 },
+  suggestionLabel: { color: Colors.muted, fontSize: 12, fontStyle: 'italic', marginBottom: 10 },
+  suggestionActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  suggestionAddBtn: { backgroundColor: Colors.primary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
+  suggestionAddText: { color: Colors.white, fontWeight: '700', fontSize: 13 },
+  suggestionDismiss: { color: Colors.muted, fontSize: 13 },
+  suggestionDone: { color: Colors.success, fontSize: 13, fontWeight: '600' },
 });

@@ -76,6 +76,18 @@ Given their goals and upcoming events, generate a short prioritized daily plan:
 - One small habit or task that moves them toward their goal
 
 Be direct and specific. No fluff.""",
+
+    "progress_review": """You are a goal progress coach reviewing a student's Campus OS goal dashboard.
+You have access to their milestones, the events Copilot recommended, and which ones they attended.
+
+Your job:
+1. Summarize progress honestly — what's going well, what's falling behind
+2. Call out any events they skipped and what they missed
+3. Recommend the single most impactful next action (an event, a reach-out, a habit)
+4. Keep the tone encouraging but direct — no fluff
+
+When you identify a specific upcoming event that would help, include it in your response with the format:
+[SUGGEST_EVENT: <event title>] so the app can surface it as a dashboard suggestion card.""",
 }
 
 
@@ -115,6 +127,61 @@ def _build_context(user_id: int, db: Session) -> str:
     return " ".join(parts)
 
 
+def _build_dashboard_context(user_id: int, db: Session) -> str:
+    """Build a dashboard summary string for the progress_review Copilot mode."""
+    goal = db.query(models.Goal).filter(models.Goal.user_id == user_id).first()
+    if not goal:
+        return ""
+
+    parts = []
+    career_milestones = json.loads(goal.career_milestones or "[]")
+    social_milestones = json.loads(goal.social_milestones or "[]")
+
+    if career_milestones:
+        parts.append("Career milestones: " + "; ".join(
+            f"{m['title']} ({m.get('current_count', 0)}/{m['target_count']})" for m in career_milestones
+        ))
+    if social_milestones:
+        parts.append("Social milestones: " + "; ".join(
+            f"{m['title']} ({m.get('current_count', 0)}/{m['target_count']})" for m in social_milestones
+        ))
+
+    goal_events = db.query(models.GoalEvent).filter(models.GoalEvent.user_id == user_id).all()
+    attended = [ge for ge in goal_events if ge.attended is True]
+    skipped = [ge for ge in goal_events if ge.attended is False]
+    pending = [ge for ge in goal_events if ge.attended is None]
+
+    if attended:
+        titles = [db.query(models.Event).filter(models.Event.id == ge.event_id).first().title for ge in attended[:3]]
+        parts.append(f"Attended events: {', '.join(t for t in titles if t)}.")
+    if skipped:
+        titles = [db.query(models.Event).filter(models.Event.id == ge.event_id).first().title for ge in skipped[:3]]
+        parts.append(f"Skipped events: {', '.join(t for t in titles if t)}.")
+    if pending:
+        titles = [db.query(models.Event).filter(models.Event.id == ge.event_id).first().title for ge in pending[:3]]
+        parts.append(f"Upcoming dashboard events: {', '.join(t for t in titles if t)}.")
+
+    return " ".join(parts)
+
+
+import re
+
+_SUGGEST_RE = re.compile(r"\[SUGGEST_EVENT:\s*([^\]]+)\]")
+
+
+def _find_event_suggestion(text: str, db: Session):
+    """Extract [SUGGEST_EVENT: title] markers and resolve to an event record."""
+    match = _SUGGEST_RE.search(text)
+    if not match:
+        return None
+    title_fragment = match.group(1).strip().lower()
+    events = db.query(models.Event).filter(models.Event.status == "published").all()
+    for event in events:
+        if title_fragment in event.title.lower():
+            return event
+    return None
+
+
 @router.post("/chat")
 async def copilot_chat(payload: schemas.CopilotChatRequest, db: Session = Depends(get_db)):
     if not os.getenv("AZURE_OPENAI_API_KEY"):
@@ -127,6 +194,11 @@ async def copilot_chat(payload: schemas.CopilotChatRequest, db: Session = Depend
     if user_context:
         system_prompt += f"\n\nUser context: {user_context}"
 
+    if mode == "progress_review":
+        dashboard_ctx = _build_dashboard_context(payload.user_id, db)
+        if dashboard_ctx:
+            system_prompt += f"\n\nDashboard state: {dashboard_ctx}"
+
     if payload.context:
         system_prompt += f"\n\nAdditional context: {json.dumps(payload.context)}"
 
@@ -135,6 +207,7 @@ async def copilot_chat(payload: schemas.CopilotChatRequest, db: Session = Depend
         messages.append({"role": msg.role, "content": msg.content})
 
     async def stream_response():
+        full_text = ""
         stream = client.chat.completions.create(
             model=CHAT_MODEL,
             messages=messages,
@@ -143,9 +216,25 @@ async def copilot_chat(payload: schemas.CopilotChatRequest, db: Session = Depend
             temperature=0.7,
         )
         for chunk in stream:
+            if not chunk.choices:
+                continue
             delta = chunk.choices[0].delta.content
             if delta:
+                full_text += delta
                 yield f"data: {json.dumps({'content': delta})}\n\n"
+
+        # After streaming, check for event suggestion markers
+        suggested_event = _find_event_suggestion(full_text, db)
+        if suggested_event:
+            suggestion_payload = {
+                "event_id": suggested_event.id,
+                "title": suggested_event.title,
+                "location": suggested_event.location,
+                "starts_at": suggested_event.starts_at.isoformat(),
+                "contribution_label": "Suggested by Copilot for your goal",
+            }
+            yield f"data: {json.dumps({'suggestion': suggestion_payload})}\n\n"
+
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(stream_response(), media_type="text/event-stream")

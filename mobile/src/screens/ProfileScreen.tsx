@@ -8,6 +8,8 @@ import { TagChip } from '../components/TagChip';
 import { getUserRSVPs, getInterests } from '../api/users';
 import { getGoal } from '../api/goals';
 import { fetchEvent } from '../api/events';
+import { fetchDashboard } from '../api/dashboard';
+import { getConnections, getPendingRequests } from '../api/connections';
 import { useStore } from '../store/useStore';
 
 const GOAL_TYPE_LABEL: Record<string, string> = {
@@ -79,8 +81,30 @@ export function ProfileScreen({ navigation }: any) {
     enabled: !!userId,
   });
 
+  const dashboardQuery = useQuery({
+    queryKey: ['dashboard', userId],
+    queryFn: () => fetchDashboard(userId!),
+    enabled: !!userId,
+    retry: false,
+  });
+
+  const connectionsQuery = useQuery({
+    queryKey: ['connections', userId],
+    queryFn: () => getConnections(userId!),
+    enabled: !!userId,
+  });
+
+  const pendingQuery = useQuery({
+    queryKey: ['pending', userId],
+    queryFn: () => getPendingRequests(userId!),
+    enabled: !!userId,
+  });
+
   const goal = goalQuery.data;
   const interests = interestsQuery.data ?? [];
+  const dashboard = dashboardQuery.data;
+  const connections = connectionsQuery.data ?? [];
+  const pendingCount = pendingQuery.data?.length ?? 0;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -119,6 +143,37 @@ export function ProfileScreen({ navigation }: any) {
           </View>
         )}
 
+        {dashboard && (
+          <TouchableOpacity
+            style={styles.section}
+            onPress={() => navigation.navigate('GoalDashboard')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.sectionTitle}>Goal Progress</Text>
+            <View style={styles.progressCard}>
+              {['career', 'both'].includes(dashboard.primary_type) && (
+                <View style={styles.progressRow}>
+                  <Text style={styles.progressLabel}>Career</Text>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${Math.round(dashboard.career_progress * 100)}%` }]} />
+                  </View>
+                  <Text style={styles.progressPct}>{Math.round(dashboard.career_progress * 100)}%</Text>
+                </View>
+              )}
+              {['social', 'both'].includes(dashboard.primary_type) && (
+                <View style={styles.progressRow}>
+                  <Text style={styles.progressLabel}>Social</Text>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${Math.round(dashboard.social_progress * 100)}%` }]} />
+                  </View>
+                  <Text style={styles.progressPct}>{Math.round(dashboard.social_progress * 100)}%</Text>
+                </View>
+              )}
+              <Text style={styles.progressLink}>View full dashboard →</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
         {interests.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Your Interests</Text>
@@ -129,6 +184,39 @@ export function ProfileScreen({ navigation }: any) {
             </View>
           </View>
         )}
+
+        <TouchableOpacity
+          style={styles.section}
+          onPress={() => navigation.navigate('Connections')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.connectionsHeader}>
+            <Text style={styles.sectionTitle}>Connections</Text>
+            <Text style={styles.connectionsCount}>{connections.length} friends →</Text>
+          </View>
+          <View style={styles.connectionsCard}>
+            {pendingCount > 0 && (
+              <View style={styles.pendingBadgeRow}>
+                <View style={styles.pendingDot} />
+                <Text style={styles.pendingBadgeText}>{pendingCount} pending request{pendingCount > 1 ? 's' : ''}</Text>
+              </View>
+            )}
+            {connections.length === 0 ? (
+              <Text style={styles.emptyText}>Find people to connect with</Text>
+            ) : (
+              <View style={styles.avatarRow}>
+                {connections.slice(0, 4).map(c => (
+                  <View key={c.id} style={styles.miniAvatar}>
+                    <Text style={styles.miniAvatarText}>{c.display_name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                ))}
+                {connections.length > 4 && (
+                  <Text style={styles.moreText}>+{connections.length - 4}</Text>
+                )}
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Upcoming RSVPs</Text>
@@ -182,6 +270,32 @@ const styles = StyleSheet.create({
   rsvpTitle: { color: Colors.text, fontSize: 14, fontWeight: '600' },
   rsvpMeta: { color: Colors.subtext, fontSize: 12, marginTop: 2 },
   emptyText: { color: Colors.muted, fontSize: 14, textAlign: 'center' },
+  progressCard: {
+    backgroundColor: Colors.card, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: Colors.border, gap: 10,
+  },
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  progressLabel: { color: Colors.subtext, fontSize: 12, width: 48 },
+  progressTrack: { flex: 1, height: 6, backgroundColor: '#252535', borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: 3 },
+  progressPct: { color: Colors.text, fontSize: 12, fontWeight: '700', width: 32, textAlign: 'right' },
+  progressLink: { color: Colors.primaryLight, fontSize: 12, fontWeight: '600', marginTop: 4 },
+  connectionsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  connectionsCount: { color: Colors.primaryLight, fontSize: 13, fontWeight: '600' },
+  connectionsCard: {
+    backgroundColor: Colors.card, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: Colors.border, gap: 10,
+  },
+  pendingBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pendingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.accent },
+  pendingBadgeText: { color: Colors.accent, fontSize: 13, fontWeight: '600' },
+  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  miniAvatar: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center',
+  },
+  miniAvatarText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  moreText: { color: Colors.subtext, fontSize: 13, fontWeight: '600', marginLeft: 4 },
   logoutBtn: {
     marginTop: 32, borderWidth: 1, borderColor: Colors.border,
     borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12,

@@ -64,7 +64,7 @@ def seed():
         base = datetime(2026, 4, 9)
         return base + timedelta(days=days_offset, hours=hour, minutes=minute)
 
-    def add_event(title, description, location, organizer, starts_at, ends_at, tag_names, is_virtual=False, cover=None, rsvp_count=0):
+    def add_event(title, description, location, organizer, starts_at, ends_at, tag_names, is_virtual=False, cover=None, rsvp_count=0, lat=None, lng=None):
         event = models.Event(
             title=title,
             description=description,
@@ -75,6 +75,8 @@ def seed():
             is_virtual=is_virtual,
             cover_image_url=cover,
             rsvp_count=rsvp_count,
+            lat=lat,
+            lng=lng,
         )
         db.add(event)
         db.flush()
@@ -86,6 +88,19 @@ def seed():
 
     # --- Events ---
 
+    # NYU campus coordinate reference (Washington Square area):
+    # Kimmel Center:           40.7295, -74.0010
+    # Bobst Library:           40.7293, -74.0004
+    # Warren Weaver Hall:      40.7286, -74.0010
+    # Stern / Tisch Hall:      40.7290, -74.0038
+    # Palladium (14th St):     40.7322, -73.9869
+    # Global Center (GCASL):   40.7287, -73.9987
+    # Lipton Hall:             40.7296, -73.9994
+    # Third North:             40.7302, -73.9998
+    # Clive Davis Institute:   40.7276, -74.0006
+    # Tandon (Brooklyn):       40.6942, -73.9857
+    # Wasserman Center:        40.7294, -73.9996
+
     # Day 0 — April 9
     add_event(
         "Tech Career Fair — Spring 2026",
@@ -94,7 +109,7 @@ def seed():
         "NYU Wasserman Center",
         dt(0, 10), dt(0, 15),
         ["software-engineering", "networking", "product-management", "data-science"],
-        rsvp_count=312,
+        rsvp_count=312, lat=40.7295, lng=-74.0010,
     )
     add_event(
         "Chess Club Weekly Meetup",
@@ -103,7 +118,7 @@ def seed():
         "NYU Chess Club",
         dt(0, 18), dt(0, 20),
         ["chess", "community"],
-        rsvp_count=24,
+        rsvp_count=24, lat=40.7293, lng=-74.0004,
     )
     add_event(
         "Morning Yoga on the Rooftop",
@@ -112,7 +127,7 @@ def seed():
         "NYU Wellness Club",
         dt(0, 7, 30), dt(0, 8, 30),
         ["yoga", "wellness", "fitness"],
-        rsvp_count=18,
+        rsvp_count=18, lat=40.7322, lng=-73.9869,
     )
 
     # Day 1 — April 10
@@ -123,7 +138,7 @@ def seed():
         "NYU AI Society",
         dt(1, 14), dt(1, 17),
         ["data-science", "software-engineering", "workshop"],
-        rsvp_count=87,
+        rsvp_count=87, lat=40.7286, lng=-74.0010,
     )
     add_event(
         "Finance Networking Night",
@@ -132,7 +147,7 @@ def seed():
         "NYU Finance Club",
         dt(1, 18, 30), dt(1, 21),
         ["finance", "networking", "consulting"],
-        rsvp_count=145,
+        rsvp_count=145, lat=40.7290, lng=-74.0038,
     )
     add_event(
         "Friday Photography Walk — SoHo",
@@ -141,7 +156,7 @@ def seed():
         "NYU Photo Society",
         dt(1, 15), dt(1, 17, 30),
         ["photography", "art", "community"],
-        rsvp_count=31,
+        rsvp_count=31, lat=40.7261, lng=-74.0008,
     )
 
     # Day 2 — April 11
@@ -152,7 +167,7 @@ def seed():
         "NYU Entrepreneurs",
         dt(2, 17), dt(2, 19, 30),
         ["entrepreneurship", "networking", "marketing"],
-        rsvp_count=93,
+        rsvp_count=93, lat=40.6942, lng=-73.9857,
     )
     add_event(
         "Weekend Game Night",
@@ -161,7 +176,7 @@ def seed():
         "NYU Social Club",
         dt(2, 19), dt(2, 23),
         ["game-night", "gaming", "community"],
-        rsvp_count=56,
+        rsvp_count=56, lat=40.7296, lng=-73.9994,
     )
     add_event(
         "Open Mic Night",
@@ -170,7 +185,7 @@ def seed():
         "NYU Arts Collective",
         dt(2, 20), dt(2, 23),
         ["music", "art", "community"],
-        rsvp_count=72,
+        rsvp_count=72, lat=40.7295, lng=-74.0010,
     )
 
     # Day 3 — April 12
@@ -181,7 +196,7 @@ def seed():
         "NYU Mindfulness Club",
         dt(3, 10), dt(3, 11, 30),
         ["meditation", "mental-health", "wellness"],
-        rsvp_count=21,
+        rsvp_count=21, lat=40.7287, lng=-73.9987,
     )
     add_event(
         "Cooking Class: Ramen from Scratch",
@@ -190,7 +205,7 @@ def seed():
         "NYU Food & Culture Club",
         dt(3, 14), dt(3, 16, 30),
         ["cooking", "community", "hobby"],
-        rsvp_count=28,
+        rsvp_count=28, lat=40.7322, lng=-73.9869,
     )
 
     # Day 4 — April 13
@@ -201,8 +216,7 @@ def seed():
         "NYU Product Society",
         dt(4, 12), dt(4, 13, 30),
         ["product-management", "workshop", "software-engineering"],
-        is_virtual=True,
-        rsvp_count=204,
+        is_virtual=True, rsvp_count=204,
     )
     add_event(
         "Speed Friending — Meet New People",
@@ -211,7 +225,7 @@ def seed():
         "NYU Social Connection",
         dt(4, 18), dt(4, 20),
         ["speed-friending", "mixer", "community"],
-        rsvp_count=67,
+        rsvp_count=67, lat=40.7295, lng=-74.0010,
     )
 
     # Day 5 — April 14
@@ -222,7 +236,7 @@ def seed():
         "NYU Design Guild",
         dt(5, 15), dt(5, 17, 30),
         ["design", "workshop", "product-management"],
-        rsvp_count=49,
+        rsvp_count=49, lat=40.6926, lng=-73.9874,
     )
     add_event(
         "Rock Climbing Intro — Brooklyn Boulders",
@@ -231,7 +245,7 @@ def seed():
         "NYU Outdoor Adventure Club",
         dt(5, 16), dt(5, 19),
         ["climbing", "fitness", "community"],
-        rsvp_count=22,
+        rsvp_count=22, lat=40.6737, lng=-73.9837,
     )
     add_event(
         "Consulting Case Practice Session",
@@ -240,7 +254,7 @@ def seed():
         "NYU Consulting Club",
         dt(5, 17), dt(5, 19, 30),
         ["consulting", "networking", "workshop"],
-        rsvp_count=61,
+        rsvp_count=61, lat=40.7290, lng=-74.0038,
     )
 
     # Day 6 — April 15
@@ -251,7 +265,7 @@ def seed():
         "NY Tech Alliance",
         dt(6, 19), dt(6, 22),
         ["entrepreneurship", "networking", "software-engineering"],
-        rsvp_count=288,
+        rsvp_count=288, lat=40.7509, lng=-73.9996,
     )
     add_event(
         "Indie Film Screening + Discussion",
@@ -260,7 +274,7 @@ def seed():
         "NYU Film Society",
         dt(6, 18), dt(6, 21),
         ["film", "art", "community"],
-        rsvp_count=85,
+        rsvp_count=85, lat=40.7298, lng=-74.0015,
     )
 
     # Day 7 — April 16
@@ -271,7 +285,7 @@ def seed():
         "NYU Data Science Association",
         dt(7, 16), dt(7, 18),
         ["data-science", "networking", "research"],
-        rsvp_count=112,
+        rsvp_count=112, lat=40.7286, lng=-74.0010,
     )
     add_event(
         "Hiking Trip — Palisades Interstate Park",
@@ -280,7 +294,7 @@ def seed():
         "NYU Outdoor Adventure Club",
         dt(7, 8), dt(7, 18),
         ["hiking", "fitness", "community"],
-        rsvp_count=34,
+        rsvp_count=34, lat=40.7293, lng=-74.0004,
     )
 
     # Day 8 — April 17
@@ -291,8 +305,7 @@ def seed():
         "NYU Marketing Association",
         dt(8, 12), dt(8, 14),
         ["marketing", "workshop", "data-science"],
-        is_virtual=True,
-        rsvp_count=176,
+        is_virtual=True, rsvp_count=176,
     )
     add_event(
         "Art Journaling Drop-In",
@@ -301,7 +314,7 @@ def seed():
         "NYU Arts Collective",
         dt(8, 15), dt(8, 17),
         ["art", "mental-health", "wellness"],
-        rsvp_count=19,
+        rsvp_count=19, lat=40.7295, lng=-74.0010,
     )
     add_event(
         "Hackathon Info Session — HackNYU 2026",
@@ -310,7 +323,7 @@ def seed():
         "HackNYU Team",
         dt(8, 17), dt(8, 18, 30),
         ["software-engineering", "entrepreneurship", "workshop"],
-        rsvp_count=143,
+        rsvp_count=143, lat=40.6942, lng=-73.9857,
     )
 
     # Day 9 — April 18
@@ -321,7 +334,7 @@ def seed():
         "NYU Wasserman Center",
         dt(9, 13), dt(9, 15),
         ["networking", "workshop", "software-engineering"],
-        rsvp_count=20,
+        rsvp_count=20, lat=40.7294, lng=-73.9996,
     )
     add_event(
         "Saturday Morning Run — Central Park",
@@ -330,7 +343,7 @@ def seed():
         "NYU Running Club",
         dt(9, 8), dt(9, 10),
         ["fitness", "community", "wellness"],
-        rsvp_count=41,
+        rsvp_count=41, lat=40.7681, lng=-73.9819,
     )
 
     # Day 10 — April 19
@@ -341,7 +354,7 @@ def seed():
         "NYU Music Tech",
         dt(10, 14), dt(10, 18),
         ["music", "art", "workshop"],
-        rsvp_count=33,
+        rsvp_count=33, lat=40.7276, lng=-74.0006,
     )
     add_event(
         "Venture Capital 101 — How Startups Get Funded",
@@ -350,7 +363,7 @@ def seed():
         "NYU Entrepreneurs",
         dt(10, 16), dt(10, 18),
         ["entrepreneurship", "finance", "networking"],
-        rsvp_count=189,
+        rsvp_count=189, lat=40.7290, lng=-74.0038,
     )
 
     # Day 11 — April 20
@@ -361,7 +374,7 @@ def seed():
         "NYU CS Department",
         dt(11, 17), dt(11, 19),
         ["study-group", "software-engineering", "research"],
-        rsvp_count=38,
+        rsvp_count=38, lat=40.7286, lng=-74.0010,
     )
     add_event(
         "International Food Festival",
@@ -370,7 +383,7 @@ def seed():
         "NYU Global Cultural Council",
         dt(11, 12), dt(11, 17),
         ["cooking", "community", "mixer"],
-        rsvp_count=402,
+        rsvp_count=402, lat=40.7295, lng=-74.0010,
     )
 
     # Day 12 — April 21
@@ -381,7 +394,7 @@ def seed():
         "NYU Design Guild",
         dt(12, 14), dt(12, 17),
         ["design", "research", "workshop"],
-        rsvp_count=44,
+        rsvp_count=44, lat=40.6926, lng=-73.9874,
     )
     add_event(
         "Trivia Night — Mix & Match Teams",
@@ -390,7 +403,7 @@ def seed():
         "NYU Residential Life",
         dt(12, 19), dt(12, 21, 30),
         ["game-night", "mixer", "community"],
-        rsvp_count=79,
+        rsvp_count=79, lat=40.7302, lng=-73.9998,
     )
 
     # Day 13 — April 22
@@ -401,7 +414,7 @@ def seed():
         "NYU Women in Finance",
         dt(13, 17, 30), dt(13, 19, 30),
         ["finance", "networking", "consulting"],
-        rsvp_count=167,
+        rsvp_count=167, lat=40.7290, lng=-74.0038,
     )
     add_event(
         "Sunset Rooftop Social — End of Week",
@@ -410,7 +423,7 @@ def seed():
         "NYU Social Connection",
         dt(13, 18), dt(13, 21),
         ["mixer", "community", "speed-friending"],
-        rsvp_count=95,
+        rsvp_count=95, lat=40.7322, lng=-73.9869,
     )
 
     # Day 14 — April 23
@@ -421,7 +434,7 @@ def seed():
         "NYU Mindfulness Club",
         dt(14, 11), dt(14, 12, 30),
         ["meditation", "mental-health", "wellness"],
-        rsvp_count=27,
+        rsvp_count=27, lat=40.7287, lng=-73.9987,
     )
     add_event(
         "HackNYU 2026 — Opening Ceremony",
@@ -430,7 +443,7 @@ def seed():
         "HackNYU Team",
         dt(14, 17), dt(16, 17),
         ["software-engineering", "entrepreneurship", "design", "data-science"],
-        rsvp_count=534,
+        rsvp_count=534, lat=40.6942, lng=-73.9857,
     )
 
     db.commit()

@@ -6,7 +6,7 @@ load_dotenv()
 
 from database import engine
 import models
-from routers import events, users, goals, recommendations, copilot
+from routers import events, users, goals, recommendations, copilot, map, notifications, connections
 from seed import seed
 
 models.Base.metadata.create_all(bind=engine)
@@ -27,6 +27,9 @@ app.include_router(users.router)
 app.include_router(goals.router)
 app.include_router(recommendations.router)
 app.include_router(copilot.router)
+app.include_router(map.router)
+app.include_router(notifications.router)
+app.include_router(connections.router)
 
 
 @app.get("/")

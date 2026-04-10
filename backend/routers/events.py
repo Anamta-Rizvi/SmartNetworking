@@ -85,3 +85,31 @@ def get_event(event_id: int, db: Session = Depends(get_db)):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Event not found")
     return _event_with_tags(event)
+
+
+@router.get("/{event_id}/attendees", response_model=List[schemas.RSVPAttendeeOut])
+def get_attendees(
+    event_id: int,
+    user_id: Optional[int] = Query(None, description="Requesting user — used to compute connection_status"),
+    db: Session = Depends(get_db),
+):
+    """Return all RSVPs for an event with connection status relative to the requesting user."""
+    from routers.connections import _connection_status
+
+    rsvps = db.query(models.RSVP).filter(models.RSVP.event_id == event_id).all()
+    result = []
+    for rsvp in rsvps:
+        attendee = db.query(models.User).filter(models.User.id == rsvp.user_id).first()
+        if not attendee:
+            continue
+        status = "none"
+        if user_id and user_id != attendee.id:
+            status = _connection_status(user_id, attendee.id, db)
+        elif user_id == attendee.id:
+            status = "self"
+        result.append(schemas.RSVPAttendeeOut(
+            user_id=attendee.id,
+            display_name=attendee.display_name,
+            connection_status=status,
+        ))
+    return result

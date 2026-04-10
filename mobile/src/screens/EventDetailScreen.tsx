@@ -8,6 +8,7 @@ import { Colors } from '../constants/colors';
 import { TagChip } from '../components/TagChip';
 import { fetchEvent } from '../api/events';
 import { createRSVP, getUserRSVPs } from '../api/users';
+import { fetchEventAttendees, sendConnectionRequest, RSVPAttendeeOut } from '../api/connections';
 import { useStore } from '../store/useStore';
 
 function formatDateTime(dateStr: string) {
@@ -22,6 +23,8 @@ export function EventDetailScreen({ route, navigation }: any) {
   const { eventId } = route.params;
   const userId = useStore(s => s.userId);
   const queryClient = useQueryClient();
+  const [showAllAttendees, setShowAllAttendees] = useState(false);
+  const [localStatuses, setLocalStatuses] = useState<Record<number, string>>({});
 
   const eventQuery = useQuery({
     queryKey: ['event', eventId],
@@ -34,17 +37,34 @@ export function EventDetailScreen({ route, navigation }: any) {
     enabled: !!userId,
   });
 
+  const attendeesQuery = useQuery<RSVPAttendeeOut[]>({
+    queryKey: ['attendees', eventId, userId],
+    queryFn: () => fetchEventAttendees(eventId, userId!),
+    enabled: !!userId,
+  });
+
   const rsvpMutation = useMutation({
     mutationFn: () => createRSVP(userId!, eventId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rsvps', userId] });
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['attendees', eventId, userId] });
     },
     onError: (e: any) => Alert.alert('Error', e.message),
   });
 
+  const connectMutation = useMutation({
+    mutationFn: (addresseeId: number) => sendConnectionRequest(userId!, addresseeId),
+    onSuccess: (_, addresseeId) => {
+      setLocalStatuses(prev => ({ ...prev, [addresseeId]: 'pending_sent' }));
+    },
+    onError: () => Alert.alert('Error', 'Could not send connection request.'),
+  });
+
   const event = eventQuery.data;
   const alreadyRSVPed = rsvpsQuery.data?.some(r => r.event_id === eventId) ?? false;
+  const attendees = attendeesQuery.data ?? [];
+  const visibleAttendees = showAllAttendees ? attendees : attendees.slice(0, 5);
 
   if (eventQuery.isLoading) {
     return (
@@ -111,6 +131,41 @@ export function EventDetailScreen({ route, navigation }: any) {
           ))}
         </View>
 
+        {attendees.length > 0 && (
+          <>
+            <View style={styles.divider} />
+            <Text style={styles.sectionTitle}>Who's Going ({attendees.length})</Text>
+            {visibleAttendees.map(a => {
+              const status = localStatuses[a.user_id] ?? a.connection_status;
+              return (
+                <View key={a.user_id} style={styles.attendeeRow}>
+                  <View style={styles.attendeeAvatar}>
+                    <Text style={styles.attendeeAvatarText}>{a.display_name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <Text style={styles.attendeeName} numberOfLines={1}>{a.display_name}</Text>
+                  {status === 'self' ? null : status === 'connected' ? (
+                    <View style={styles.connectedBadge}><Text style={styles.connectedBadgeText}>Connected</Text></View>
+                  ) : status === 'pending_sent' ? (
+                    <Text style={styles.pendingText}>Pending</Text>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.connectBtn}
+                      onPress={() => connectMutation.mutate(a.user_id)}
+                    >
+                      <Text style={styles.connectBtnText}>Connect</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+            {!showAllAttendees && attendees.length > 5 && (
+              <TouchableOpacity onPress={() => setShowAllAttendees(true)}>
+                <Text style={styles.seeAllText}>+ {attendees.length - 5} more</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+
         <View style={{ height: 120 }} />
       </ScrollView>
 
@@ -167,4 +222,26 @@ const styles = StyleSheet.create({
     padding: 16, alignItems: 'center', borderWidth: 1, borderColor: Colors.success,
   },
   rsvpedText: { color: Colors.success, fontSize: 16, fontWeight: '700' },
+  attendeeRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  attendeeAvatar: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center',
+  },
+  attendeeAvatarText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  attendeeName: { color: Colors.text, fontSize: 14, flex: 1 },
+  connectedBadge: {
+    backgroundColor: 'rgba(16,185,129,0.15)', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 4,
+  },
+  connectedBadgeText: { color: Colors.success, fontSize: 11, fontWeight: '700' },
+  pendingText: { color: Colors.muted, fontSize: 12, fontWeight: '600' },
+  connectBtn: {
+    backgroundColor: Colors.primary, borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 6,
+  },
+  connectBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  seeAllText: { color: Colors.primaryLight, fontSize: 13, fontWeight: '600', marginTop: 10 },
 });

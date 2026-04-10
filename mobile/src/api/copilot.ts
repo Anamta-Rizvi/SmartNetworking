@@ -6,7 +6,16 @@ export type CopilotMode =
   | 'elevator_pitch'
   | 'icebreaker'
   | 'followup'
-  | 'daily_planner';
+  | 'daily_planner'
+  | 'progress_review';
+
+export interface EventSuggestion {
+  event_id: number;
+  title: string;
+  location: string;
+  starts_at: string;
+  contribution_label: string;
+}
 
 export interface Message {
   role: 'user' | 'assistant';
@@ -20,6 +29,7 @@ export async function streamCopilotChat(
   context: Record<string, unknown>,
   onChunk: (text: string) => void,
   onDone: () => void,
+  onSuggestion?: (suggestion: EventSuggestion) => void,
 ) {
   const response = await fetch(`${API_BASE}/copilot/chat`, {
     method: 'POST',
@@ -48,6 +58,7 @@ export async function streamCopilotChat(
       try {
         const parsed = JSON.parse(data);
         if (parsed.content) onChunk(parsed.content);
+        if (parsed.suggestion && onSuggestion) onSuggestion(parsed.suggestion);
       } catch {}
     }
   }

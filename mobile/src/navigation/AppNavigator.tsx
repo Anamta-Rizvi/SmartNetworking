@@ -14,6 +14,9 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { EventDetailScreen } from '../screens/EventDetailScreen';
 import { CopilotScreen } from '../screens/CopilotScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import MapScreen from '../screens/MapScreen';
+import GoalDashboardScreen from '../screens/GoalDashboardScreen';
+import ConnectionsScreen from '../screens/ConnectionsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -50,7 +53,15 @@ function MainTabs() {
         component={HomeScreen}
         options={{
           tabBarLabel: 'Home',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>🏠</Text>,
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🏠</Text>,
+        }}
+      />
+      <Tab.Screen
+        name="Map"
+        component={MapScreen}
+        options={{
+          tabBarLabel: 'Map',
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🗺️</Text>,
         }}
       />
       <Tab.Screen
@@ -58,7 +69,7 @@ function MainTabs() {
         component={CopilotScreen}
         options={{
           tabBarLabel: 'Copilot',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>🤖</Text>,
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🤖</Text>,
         }}
       />
       <Tab.Screen
@@ -66,7 +77,7 @@ function MainTabs() {
         component={ProfileScreen}
         options={{
           tabBarLabel: 'Profile',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>👤</Text>,
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>👤</Text>,
         }}
       />
     </Tab.Navigator>
@@ -87,6 +98,16 @@ export function AppNavigator() {
             <Stack.Screen
               name="EventDetail"
               component={EventDetailScreen}
+              options={{ presentation: 'card' }}
+            />
+            <Stack.Screen
+              name="GoalDashboard"
+              component={GoalDashboardScreen}
+              options={{ presentation: 'card' }}
+            />
+            <Stack.Screen
+              name="Connections"
+              component={ConnectionsScreen}
               options={{ presentation: 'card' }}
             />
           </>

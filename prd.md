@@ -63,15 +63,37 @@ Goals and onboarding capture **interests, hobby tags, and optional social prefer
   - “Near You”
   - Optional emphasis: **career ROI vs social / hobby match** (user-tunable or goal-driven)
 
-## 🔔 Notifications
-- 15 min / 30 min reminders
-- Proximity-based alerts
-- Smart prioritization
+## 🔔 Smart Notifications
+- **Event proximity**: "You're 5 min from [Event]. Starts in 15." Triggered within configurable radius (default 300 m)
+- **Peer proximity**: "Someone interested in AI is nearby." Double opt-in required; fuzzy distance only ("nearby", not exact coordinates)
+- **Friend proximity**: "Alex is at an event you saved."
+- **Opportunistic discovery**: "A club you might like is meeting 2 buildings away right now."
+- **Schedule-aware**: No proximity alerts during user's blocked schedule times
+- **Standard reminders**: 15 min / 30 min pre-event reminders
+- **Privacy**: Each notification type independently togglable; peer proximity requires mutual opt-in
 
-## 🗺️ Map Layer
-- Live campus map
-- Event markers
-- Heatmap of activity
+## 🗺️ Live Campus Map
+- **Opt-in presence map** showing events and students on campus
+- **Event pins**: Tap to preview event + RSVP directly from map
+- **Student pins**: Tap to see shared interests and mutual events (opt-in only)
+- **Activity clusters**: When 5+ people at one location, pin pulses as a heatmap hotspot
+- **Ghost Mode**: User sets visibility — `Everyone` | `Connections only` | `Off`
+- **Time-limited sharing**: "Share location for 1 hr / 2 hr / Until I leave"
+- **Fuzzy location**: Building-level precision by default (not exact GPS)
+- **Map tabs**: `Events` | `People` | `Heatmap`
+
+## 📊 Goal Progress Dashboard
+**Concept**: After a Copilot conversation about goals, all suggested events appear on a structured dashboard — Copilot's memory of what it recommended and how well each recommendation paid off.
+
+- **Dual-track**: Career dashboard + Social dashboard (if goal type is "both")
+- **Milestones**: Set during onboarding or via Copilot (e.g. "Attend 3 networking events", "Join 1 hobby club"); displayed as progress chips
+- **Events on dashboard**:
+  - *Upcoming*: schedule fit indicator (🟢 fits your schedule / 🔴 conflicts)
+  - *Past (unconfirmed)*: "Did you attend?" prompt — if No, event is removed and planned contribution is deducted
+  - *Attended*: shows % contribution to goal milestone (e.g. "Added 12% toward networking milestone")
+- **Copilot integration**: Copilot suggests an event mid-conversation → user sees a suggestion card → taps "Add to Dashboard" or dismisses
+- **Progress Review mode**: New Copilot mode that reads dashboard state and produces a narrative progress report + next recommended action
+- **Multiple goals**: Career and Social tracks tracked in parallel with separate progress bars
 
 ## 📸 Social Layer
 - Post photos/videos
@@ -108,7 +130,10 @@ Goals and onboarding capture **interests, hobby tags, and optional social prefer
 
 # 🏗️ Architecture
 - PostgreSQL, Redis, Kafka, Milvus
-- Services: Event, User, Notification, Recommendation, Copilot, Location
+- Services: Event, User, Notification, Recommendation, Copilot, Location, **GoalProgress**
+- **New models**: `UserLocation` (opt-in presence), `NotificationPreference`, `GoalEvent` (event-to-goal linkage)
+- **Background task**: Geofencing via Expo TaskManager — polls nearby events/peers, fires local notifications
+- **Copilot suggestion action**: Structured `suggestion` payload alongside chat response for dashboard integration
 
 ---
 
@@ -131,8 +156,12 @@ Goals and onboarding capture **interests, hobby tags, and optional social prefer
 - Personalized events
 
 ## 🗺️ Map
-- Nearby events
-- Heatmap
+- Tab bar: Events | People | Heatmap
+- Event pins (tappable → preview + RSVP)
+- Student pins (opt-in, tappable → shared interests)
+- Activity heatmap overlay
+- Ghost mode FAB (bottom-left)
+- Location sharing duration sheet (1 hr / 2 hr / Until I leave / Off)
 
 ## ➕ Create/Post
 - Create events
@@ -142,18 +171,28 @@ Goals and onboarding capture **interests, hobby tags, and optional social prefer
 - Event activity
 
 ## 🤖 Copilot
-- Recommendations
-- Scripts
+- Modes: Goal Setup, Daily Plan, Networking, Elevator Pitch, Icebreaker, Follow-Up, **Progress Review**
+- Goal suggestion cards (event + contribution label + "Add to Dashboard" / Dismiss)
+- Scripts and conversation prompts
 
 ## 👤 Profile
 - Goals (**by type**: career vs social), linked interests / hobbies
+- Goal Progress summary card → links to full Goal Dashboard
 - Progress toward **both** goal tracks
 
 ## 📄 Event Detail
 - Info + AI reasoning (**career fit and/or social / hobby fit** — e.g. “Matches your music / climbing goal”)
+- “Add to Goal Dashboard” action (if Copilot hasn't already suggested it)
+
+## 📊 Goal Dashboard
+- Career Track: progress bar, milestone chips, event list (upcoming / awaiting confirmation / attended)
+- Social Track: same structure (shown if goal type is “both”)
+- “Ask Copilot to review” → opens Copilot in Progress Review mode
 
 ## 🔔 Notifications
-- Alerts
+- Per-type toggles (event proximity, peer proximity, friend proximity, reminders)
+- Proximity radius setting (default 300 m)
+- Schedule-aware blocking
 
 ## 🎯 Onboarding
 - **Interests + hobby chips**
@@ -164,8 +203,16 @@ Goals and onboarding capture **interests, hobby tags, and optional social prefer
 
 # 🚀 MVP
 - Event feed (with **basic hobby / social tagging** where possible)
-- Notifications
+- Standard notifications (15/30 min reminders + event proximity)
 - **Goal input**: goal type (career / social), **interests / hobbies**, optional social preference line; **feed ranking** uses these signals at a minimal level
+- **Map**: events-only view (pins + heatmap); no live user presence yet
+- **Goal Dashboard**: single-track milestone + event tracking with attendance confirmation
+
+## 🔜 Post-MVP
+- Live user presence on map (student pins, ghost mode)
+- Peer proximity notifications (double opt-in)
+- Dual-track dashboard (career + social in parallel)
+- Progress Review Copilot mode
 
 ---
 
