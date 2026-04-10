@@ -9,6 +9,39 @@ import schemas
 router = APIRouter(prefix="/connections", tags=["Connections"])
 
 
+def _compute_connection_weight(
+    user_id: int,
+    other_id: int,
+    user_rsvp_ids: set,
+    user_attended_ids: set,
+    db: Session,
+) -> float:
+    """
+    Compute connection weight based on shared activity.
+    Base: 1.0 (just connected)
+    +0.2 per shared RSVP (both going to same event)
+    +0.5 per shared attended event (both actually went)
+    Capped at 5.0
+    """
+    weight = 1.0
+
+    their_rsvp_ids = {
+        r.event_id for r in
+        db.query(models.RSVP).filter(models.RSVP.user_id == other_id).all()
+    }
+    shared_rsvps = user_rsvp_ids & their_rsvp_ids
+    weight += len(shared_rsvps) * 0.2
+
+    their_attended_ids = {
+        r.event_id for r in
+        db.query(models.RSVP).filter(models.RSVP.user_id == other_id, models.RSVP.attended == True).all()
+    }
+    shared_attended = user_attended_ids & their_attended_ids
+    weight += len(shared_attended) * 0.5
+
+    return round(min(weight, 5.0), 1)
+
+
 def _get_connection_ids(user_id: int, db: Session) -> list[int]:
     rows = db.query(models.Connection).filter(
         models.Connection.status == "accepted",
@@ -147,12 +180,36 @@ def respond_to_request(
     return conn
 
 
-@router.get("/{user_id}", response_model=list[schemas.UserOut])
+@router.get("/{user_id}", response_model=list[dict])
 def list_connections(user_id: int, db: Session = Depends(get_db)):
     friend_ids = _get_connection_ids(user_id, db)
     if not friend_ids:
         return []
-    return db.query(models.User).filter(models.User.id.in_(friend_ids)).all()
+
+    user_rsvp_ids = {
+        r.event_id for r in
+        db.query(models.RSVP).filter(models.RSVP.user_id == user_id).all()
+    }
+    user_attended_ids = {
+        r.event_id for r in
+        db.query(models.RSVP).filter(models.RSVP.user_id == user_id, models.RSVP.attended == True).all()
+    }
+
+    result = []
+    for friend in db.query(models.User).filter(models.User.id.in_(friend_ids)).all():
+        weight = _compute_connection_weight(user_id, friend.id, user_rsvp_ids, user_attended_ids, db)
+        result.append({
+            "id": friend.id,
+            "display_name": friend.display_name,
+            "email": friend.email,
+            "major": friend.major,
+            "grad_year": friend.grad_year,
+            "university": friend.university,
+            "avatar_url": friend.avatar_url,
+            "created_at": friend.created_at.isoformat() if friend.created_at else None,
+            "connection_weight": weight,
+        })
+    return result
 
 
 @router.get("/{user_id}/pending", response_model=list[schemas.ConnectionOut])
@@ -183,6 +240,10 @@ def get_suggestions(user_id: int, db: Session = Depends(get_db)):
     user_event_ids = {
         r.event_id for r in
         db.query(models.RSVP).filter(models.RSVP.user_id == user_id).all()
+    }
+    user_attended_ids = {
+        r.event_id for r in
+        db.query(models.RSVP).filter(models.RSVP.user_id == user_id, models.RSVP.attended == True).all()
     }
 
     # Get all connection IDs (both directions) to exclude
@@ -241,6 +302,8 @@ def get_suggestions(user_id: int, db: Session = Depends(get_db)):
             reasons.append(f"Same major: {u.major}")
 
         if score > 0:
+            # Compute potential weight (what it would be once connected)
+            potential_weight = 1.0 + len(shared_events) * 0.5 + len(shared_tags) * 0.1
             scored.append({
                 "user_id": u.id,
                 "display_name": u.display_name,
@@ -250,6 +313,7 @@ def get_suggestions(user_id: int, db: Session = Depends(get_db)):
                 "connection_status": "none",
                 "score": score,
                 "reason": reasons[0] if reasons else "Goes to your school",
+                "connection_weight": round(min(potential_weight, 5.0), 1),
             })
 
     scored.sort(key=lambda x: x["score"], reverse=True)

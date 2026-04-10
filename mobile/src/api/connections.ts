@@ -27,6 +27,7 @@ export interface UserOut {
   grad_year: number | null;
   university: string;
   avatar_url: string | null;
+  connection_weight?: number;
 }
 
 export interface RSVPAttendeeOut {
@@ -85,6 +86,7 @@ export async function searchUsers(q: string, userId: number): Promise<Connection
 export interface SuggestedUser extends ConnectionUser {
   score: number;
   reason: string;
+  connection_weight?: number;
 }
 
 export async function getSuggestions(userId: number): Promise<SuggestedUser[]> {

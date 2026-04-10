@@ -9,6 +9,8 @@ export interface MapEvent {
   lng: number;
   rsvp_count: number;
   tags: { id: number; name: string; category: string }[];
+  goal_relevance_score?: number | null;
+  goal_relevance_label?: string | null;
 }
 
 export interface MapUser {
@@ -20,13 +22,20 @@ export interface MapUser {
   updated_at: string;
 }
 
-export async function fetchMapEvents(bounds?: {
-  sw_lat: number; sw_lng: number; ne_lat: number; ne_lng: number;
-}): Promise<MapEvent[]> {
-  const params = bounds
-    ? `?sw_lat=${bounds.sw_lat}&sw_lng=${bounds.sw_lng}&ne_lat=${bounds.ne_lat}&ne_lng=${bounds.ne_lng}`
-    : '';
-  return apiFetch<MapEvent[]>(`/map/events${params}`);
+export async function fetchMapEvents(
+  userId?: number | null,
+  bounds?: { sw_lat: number; sw_lng: number; ne_lat: number; ne_lng: number },
+): Promise<MapEvent[]> {
+  const params = new URLSearchParams();
+  if (userId) params.append('user_id', String(userId));
+  if (bounds) {
+    params.append('sw_lat', String(bounds.sw_lat));
+    params.append('sw_lng', String(bounds.sw_lng));
+    params.append('ne_lat', String(bounds.ne_lat));
+    params.append('ne_lng', String(bounds.ne_lng));
+  }
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return apiFetch<MapEvent[]>(`/map/events${query}`);
 }
 
 export async function fetchMapUsers(): Promise<MapUser[]> {

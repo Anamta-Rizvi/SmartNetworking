@@ -22,6 +22,15 @@ export interface Message {
   content: string;
 }
 
+export interface GoalCompleteData {
+  primary_type: 'career' | 'social' | 'both';
+  career_track: string | null;
+  social_intent: string | null;
+  timeline: string;
+  who_to_meet: string;
+  event_pref?: string;
+}
+
 export function streamCopilotChat(
   userId: number,
   mode: CopilotMode,
@@ -30,6 +39,7 @@ export function streamCopilotChat(
   onChunk: (text: string) => void,
   onDone: () => void,
   onSuggestion?: (suggestion: EventSuggestion) => void,
+  onGoalComplete?: (data: GoalCompleteData) => void,
 ) {
   const xhr = new XMLHttpRequest();
   xhr.open('POST', `${API_BASE}/copilot/chat`, true);
@@ -48,6 +58,7 @@ export function streamCopilotChat(
         const parsed = JSON.parse(data);
         if (parsed.content) onChunk(parsed.content);
         if (parsed.suggestion && onSuggestion) onSuggestion(parsed.suggestion);
+        if (parsed.goal_complete && onGoalComplete) onGoalComplete(parsed.goal_complete);
       } catch {}
     }
   }

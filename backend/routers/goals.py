@@ -9,6 +9,34 @@ import json
 router = APIRouter(prefix="/goals", tags=["Goals"])
 
 
+def _generate_milestones(primary_type: str, career_track: str | None, timeline: str | None) -> tuple[list, list]:
+    """Auto-generate default milestones based on goal type and timeline."""
+    multiplier = 1.0
+    if timeline == "This semester":
+        multiplier = 0.5
+    elif timeline == "By graduation":
+        multiplier = 2.0
+
+    career_milestones = []
+    social_milestones = []
+
+    if primary_type in ("career", "both"):
+        career_milestones = [
+            {"title": "Connections Made", "target_count": max(5, int(20 * multiplier)), "current_count": 0},
+            {"title": "Events Attended", "target_count": max(3, int(10 * multiplier)), "current_count": 0},
+            {"title": "Referrals Received", "target_count": max(2, int(5 * multiplier)), "current_count": 0},
+        ]
+
+    if primary_type in ("social", "both"):
+        social_milestones = [
+            {"title": "New Friends Made", "target_count": max(5, int(10 * multiplier)), "current_count": 0},
+            {"title": "Events Attended", "target_count": max(3, int(8 * multiplier)), "current_count": 0},
+            {"title": "Clubs / Orgs Joined", "target_count": max(1, int(3 * multiplier)), "current_count": 0},
+        ]
+
+    return career_milestones, social_milestones
+
+
 @router.post("/", response_model=schemas.GoalOut)
 def upsert_goal(payload: schemas.GoalCreate, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == payload.user_id).first()
@@ -16,7 +44,6 @@ def upsert_goal(payload: schemas.GoalCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
 
     existing = db.query(models.Goal).filter(models.Goal.user_id == payload.user_id).first()
-
     interests_json = json.dumps(payload.interests or [])
 
     if existing:
@@ -26,9 +53,24 @@ def upsert_goal(payload: schemas.GoalCreate, db: Session = Depends(get_db)):
         existing.interests = interests_json
         existing.social_pref_note = payload.social_pref_note
         existing.updated_at = datetime.utcnow()
+        # Regenerate milestones if goal type changed or milestones don't exist
+        if not existing.career_milestones and not existing.social_milestones:
+            c_m, s_m = _generate_milestones(payload.primary_type, payload.career_track, payload.timeline)
+            existing.career_milestones = json.dumps(c_m)
+            existing.social_milestones = json.dumps(s_m)
+        elif payload.timeline:
+            # If a new timeline was provided, regenerate milestones
+            c_m, s_m = _generate_milestones(payload.primary_type, payload.career_track, payload.timeline)
+            existing.career_milestones = json.dumps(c_m)
+            existing.social_milestones = json.dumps(s_m)
         db.commit()
         db.refresh(existing)
         return existing
+
+    # Auto-generate milestones for new goal
+    career_milestones, social_milestones = _generate_milestones(
+        payload.primary_type, payload.career_track, payload.timeline
+    )
 
     goal = models.Goal(
         user_id=payload.user_id,
@@ -37,6 +79,8 @@ def upsert_goal(payload: schemas.GoalCreate, db: Session = Depends(get_db)):
         social_intent=payload.social_intent,
         interests=interests_json,
         social_pref_note=payload.social_pref_note,
+        career_milestones=json.dumps(career_milestones),
+        social_milestones=json.dumps(social_milestones),
     )
     db.add(goal)
     db.commit()

@@ -28,14 +28,41 @@ CHAT_MODEL = os.getenv("AZURE_OPENAI_CHAT_MODEL", "gpt-4o")
 WHISPER_MODEL = os.getenv("AZURE_WHISPER_MODEL", "whisper")
 
 SYSTEM_PROMPTS = {
-    "goal_setup": """You are a friendly campus life advisor helping a student set up their goals on Campus OS.
-Guide them through:
-1. Whether they're focused on career (internships, skills, networking), social (hobbies, friendships, community), or both.
-2. If career: what field/track they're pursuing and their timeline.
-3. If social: what kinds of activities or communities interest them.
-4. Optional: any preferences about who they'd like to meet.
+    "goal_setup": """You are a friendly campus life advisor helping a student set up their networking goals on CampusOS.
 
-Be warm, conversational, and concise. Ask one question at a time. When you have enough info, summarize their goals clearly.""",
+CRITICAL INSTRUCTIONS:
+- Ask EXACTLY ONE question at a time
+- For EVERY question, you MUST include a [QUESTION] marker in this EXACT JSON format on its own line:
+  [QUESTION: {"text": "Your question here?", "options": ["Option 1", "Option 2", "Option 3"]}]
+- Write a brief warm sentence BEFORE the [QUESTION] marker
+- The user can tap an option OR type their own answer — accept both gracefully
+- Do NOT skip any step
+
+Follow this EXACT 5-step flow in order:
+
+STEP 1 — Ask about their PRIMARY GOAL:
+Write: "Welcome! Let's set up your networking goals. First..."
+[QUESTION: {"text": "What's your main goal for networking on campus?", "options": ["Career Networking", "Social Connections", "Both"]}]
+
+STEP 2 — Based on their Step 1 answer:
+- If career or both: ask about their field/track:
+  [QUESTION: {"text": "What field or track are you pursuing?", "options": ["Software Engineering", "Product Management", "Finance & Business", "Data Science", "Marketing / Design", "Research / Academia", "Other"]}]
+- If social: ask about social intent:
+  [QUESTION: {"text": "What kind of social connections are you looking for?", "options": ["Making new friends", "Finding study partners", "Joining clubs & orgs", "Building a community", "All of the above"]}]
+
+STEP 3 — Ask about TIMELINE:
+[QUESTION: {"text": "What's your timeline for achieving these goals?", "options": ["This semester", "This academic year", "By graduation"]}]
+
+STEP 4 — Ask WHO they want to meet:
+[QUESTION: {"text": "Who would you most like to connect with?", "options": ["Peers in my major", "Industry professionals", "Alumni in my field", "Professors & Faculty", "All of the above"]}]
+
+STEP 5 — Ask about EVENT PREFERENCES:
+[QUESTION: {"text": "What kind of events do you prefer for networking?", "options": ["Small group meetups", "Large conferences & fairs", "Mix of both", "Virtual events only"]}]
+
+After the user answers Step 5, respond with a warm personalized summary of their goals, then emit this EXACT marker on its own line:
+[GOAL_COMPLETE: {"primary_type": "career|social|both", "career_track": "their track or null", "social_intent": "their intent or null", "timeline": "their timeline", "who_to_meet": "their choice", "event_pref": "their preference"}]
+
+Replace the values with what the user actually told you. Use null for unused fields.""",
 
     "networking": """You are a campus networking coach helping a student prepare to connect with someone at an event.
 Given context about who they're meeting (name, role, company, shared event), generate:
@@ -167,6 +194,7 @@ def _build_dashboard_context(user_id: int, db: Session) -> str:
 import re
 
 _SUGGEST_RE = re.compile(r"\[SUGGEST_EVENT:\s*([^\]]+)\]")
+_GOAL_COMPLETE_RE = re.compile(r"\[GOAL_COMPLETE:\s*(\{[^]]+\})\]", re.DOTALL)
 
 
 def _find_event_suggestion(text: str, db: Session):
@@ -180,6 +208,17 @@ def _find_event_suggestion(text: str, db: Session):
         if title_fragment in event.title.lower():
             return event
     return None
+
+
+def _find_goal_complete(text: str):
+    """Extract [GOAL_COMPLETE: {...}] marker and return parsed goal data."""
+    match = _GOAL_COMPLETE_RE.search(text)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(1))
+    except Exception:
+        return None
 
 
 @router.post("/chat")
@@ -247,6 +286,11 @@ async def copilot_chat(payload: schemas.CopilotChatRequest, db: Session = Depend
                 "contribution_label": "Suggested by Copilot for your goal",
             }
             yield f"data: {json.dumps({'suggestion': suggestion_payload})}\n\n"
+
+        # Check for goal complete marker (emitted at end of goal_setup flow)
+        goal_data = _find_goal_complete(full_text)
+        if goal_data:
+            yield f"data: {json.dumps({'goal_complete': goal_data})}\n\n"
 
         yield "data: [DONE]\n\n"
 

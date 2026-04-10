@@ -151,13 +151,32 @@ export default function ConnectionsScreen({ navigation }: any) {
 
   const showSearch = query.trim().length >= 2;
 
-  function UserCard({ user, status, onConnect, onAccept, onDecline, subtitle }: {
+  function WeightBadge({ weight }: { weight?: number }) {
+    if (!weight) return null;
+    const filled = Math.round(weight);
+    const color = weight >= 3 ? Colors.success : weight >= 2 ? '#F59E0B' : Colors.muted;
+    return (
+      <View style={[wt.badge, { borderColor: color }]}>
+        <Text style={[wt.text, { color }]}>⚡ {weight.toFixed(1)}</Text>
+      </View>
+    );
+  }
+  const wt = StyleSheet.create({
+    badge: {
+      borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3,
+      borderWidth: 1, alignSelf: 'flex-start', marginTop: 4,
+    },
+    text: { fontSize: 10, fontWeight: '700' },
+  });
+
+  function UserCard({ user, status, onConnect, onAccept, onDecline, subtitle, weight }: {
     user: { user_id?: number; id?: number; display_name: string; major?: string | null; email?: string; avatar_url?: string | null };
     status: string;
     onConnect: () => void;
     onAccept?: () => void;
     onDecline?: () => void;
     subtitle?: string;
+    weight?: number;
   }) {
     return (
       <View style={styles.userCard}>
@@ -165,6 +184,7 @@ export default function ConnectionsScreen({ navigation }: any) {
         <View style={{ flex: 1 }}>
           <Text style={styles.userName}>{user.display_name}</Text>
           <Text style={styles.userMeta}>{subtitle ?? user.major ?? user.email ?? ''}</Text>
+          <WeightBadge weight={weight} />
         </View>
         <ConnectButton status={status} onConnect={onConnect} onAccept={onAccept} onDecline={onDecline} />
       </View>
@@ -253,12 +273,14 @@ export default function ConnectionsScreen({ navigation }: any) {
             {suggestions.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>People You May Know</Text>
+                <Text style={styles.sectionHint}>⚡ Weight shows potential connection strength</Text>
                 {suggestions.map(user => (
                   <UserCard
                     key={user.user_id}
                     user={user}
                     status={localStatuses[user.user_id] ?? user.connection_status}
                     subtitle={user.reason}
+                    weight={user.connection_weight}
                     onConnect={() => handleConnect(user.user_id)}
                   />
                 ))}
@@ -278,6 +300,19 @@ export default function ConnectionsScreen({ navigation }: any) {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.userName}>{user.display_name}</Text>
                       <Text style={styles.userMeta}>{user.major ?? user.university}</Text>
+                      {user.connection_weight != null && (
+                        <View style={styles.weightRow}>
+                          <Text style={styles.weightLabel}>
+                            ⚡ {user.connection_weight.toFixed(1)} strength
+                          </Text>
+                          <View style={styles.weightBar}>
+                            <View style={[
+                              styles.weightFill,
+                              { width: `${Math.min((user.connection_weight / 5) * 100, 100)}%` as any },
+                            ]} />
+                          </View>
+                        </View>
+                      )}
                     </View>
                     <TouchableOpacity
                       onPress={() =>
@@ -339,4 +374,13 @@ const styles = StyleSheet.create({
   userMeta: { color: Colors.subtext, fontSize: 12, marginTop: 2 },
   removeText: { color: Colors.muted, fontSize: 12, fontWeight: '600' },
   emptyText: { color: Colors.muted, fontSize: 13, fontStyle: 'italic' },
+  sectionHint: { color: Colors.muted, fontSize: 11, marginBottom: 10, fontStyle: 'italic' },
+  weightRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  weightLabel: { color: Colors.muted, fontSize: 10, fontWeight: '600' },
+  weightBar: {
+    flex: 1, height: 4, backgroundColor: Colors.border, borderRadius: 2, maxWidth: 60,
+  },
+  weightFill: {
+    height: 4, backgroundColor: Colors.primary, borderRadius: 2,
+  },
 });

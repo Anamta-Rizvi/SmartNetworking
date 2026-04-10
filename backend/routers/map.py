@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from datetime import datetime, timedelta
 from typing import Optional
@@ -7,6 +7,7 @@ import math
 import models
 import schemas
 from routers.events import _event_with_tags
+from routers.recommendations import _compute_score
 
 router = APIRouter(prefix="/map", tags=["Map"])
 
@@ -26,15 +27,17 @@ def _fuzzy(lat: float, lng: float) -> tuple[float, float]:
 
 @router.get("/events", response_model=list[schemas.EventOut])
 def map_events(
+    user_id: Optional[int] = Query(None, description="Requesting user — used to compute goal relevance"),
     sw_lat: Optional[float] = Query(None),
     sw_lng: Optional[float] = Query(None),
     ne_lat: Optional[float] = Query(None),
     ne_lng: Optional[float] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Return published events that have coordinates, optionally filtered by bounding box."""
+    """Return published events with coordinates and optional goal relevance scoring."""
     query = (
         db.query(models.Event)
+        .options(joinedload(models.Event.tags).joinedload(models.EventTag.tag))
         .filter(
             models.Event.status == "published",
             models.Event.lat.isnot(None),
@@ -49,7 +52,48 @@ def map_events(
             models.Event.lng <= ne_lng,
         )
     events = query.order_by(models.Event.starts_at).all()
-    return [_event_with_tags(e) for e in events]
+
+    # Pre-load user context for relevance scoring
+    user_tag_ids: set = set()
+    goal_type = "both"
+    if user_id:
+        user_tag_ids = {
+            ui.tag_id for ui in
+            db.query(models.UserInterest).filter(models.UserInterest.user_id == user_id).all()
+        }
+        goal = db.query(models.Goal).filter(models.Goal.user_id == user_id).first()
+        if goal:
+            goal_type = goal.primary_type
+
+    result = []
+    for event in events:
+        tags = [schemas.TagOut(id=et.tag.id, name=et.tag.name, category=et.tag.category)
+                for et in event.tags if et.tag]
+        score, label = (None, None)
+        if user_id:
+            score, label = _compute_score(event, user_tag_ids, goal_type)
+            if score == 0.0:
+                score, label = None, None
+
+        result.append(schemas.EventOut(
+            id=event.id,
+            title=event.title,
+            description=event.description,
+            location=event.location,
+            organizer=event.organizer,
+            starts_at=event.starts_at,
+            ends_at=event.ends_at,
+            is_virtual=event.is_virtual,
+            cover_image_url=event.cover_image_url,
+            rsvp_count=event.rsvp_count,
+            lat=event.lat,
+            lng=event.lng,
+            tags=tags,
+            goal_relevance_score=round(score, 3) if score is not None else None,
+            goal_relevance_label=label,
+        ))
+
+    return result
 
 
 @router.get("/users", response_model=list[schemas.FriendPresencePin])

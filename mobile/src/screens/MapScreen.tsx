@@ -21,6 +21,22 @@ import { fetchFriendPresence, FriendPresencePin } from '../api/connections';
 type MapTab = 'Events' | 'People' | 'Heatmap';
 type SharingDuration = '1hr' | '2hr' | 'untilLeave' | 'off';
 
+function getRelevanceColor(score?: number | null): string {
+  if (score == null) return '#6B7280';   // gray — no data
+  if (score >= 0.8) return '#7C3AED';   // purple — high match
+  if (score >= 0.5) return '#F59E0B';   // amber — good match
+  if (score >= 0.2) return '#3B82F6';   // blue — partial match
+  return '#6B7280';                      // gray — low match
+}
+
+function getRelevanceLabel(score?: number | null): string {
+  if (score == null) return 'No score';
+  if (score >= 0.8) return 'Top match';
+  if (score >= 0.5) return 'Good match';
+  if (score >= 0.2) return 'Partial match';
+  return 'Low match';
+}
+
 const RUTGERS_REGION = {
   latitude: 40.5008,
   longitude: -74.4474,
@@ -47,7 +63,7 @@ export default function MapScreen() {
   const loadData = useCallback(async () => {
     try {
       const [evs, frds] = await Promise.all([
-        fetchMapEvents(),
+        fetchMapEvents(userId),
         userId ? fetchFriendPresence(userId) : Promise.resolve([]),
       ]);
       setEvents(evs);
@@ -112,12 +128,26 @@ export default function MapScreen() {
 
   const renderEventPreview = () => {
     if (!selectedEvent) return null;
+    const score = selectedEvent.goal_relevance_score;
+    const color = getRelevanceColor(score);
     return (
-      <View style={styles.eventPreview}>
+      <View style={[styles.eventPreview, { borderLeftWidth: 4, borderLeftColor: color }]}>
         <Text style={styles.previewTitle} numberOfLines={1}>{selectedEvent.title}</Text>
+        {score != null && (
+          <View style={styles.relevanceRow}>
+            <View style={[styles.relevanceDot, { backgroundColor: color }]} />
+            <Text style={[styles.relevanceRowText, { color }]}>
+              {getRelevanceLabel(score)} · {Math.round(score * 100)}% goal match
+            </Text>
+          </View>
+        )}
+        {selectedEvent.goal_relevance_label && score != null && (
+          <Text style={styles.relevanceDetail}>{selectedEvent.goal_relevance_label}</Text>
+        )}
         <Text style={styles.previewMeta}>{selectedEvent.location}</Text>
         <Text style={styles.previewMeta}>
           {new Date(selectedEvent.starts_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+          {' · '}{selectedEvent.rsvp_count} going
         </Text>
         <View style={styles.previewActions}>
           <TouchableOpacity
@@ -157,19 +187,30 @@ export default function MapScreen() {
           userInterfaceStyle="dark"
           onPress={() => { setSelectedEvent(null); setSelectedFriend(null); }}
         >
-          {/* Event markers */}
+          {/* Event markers — color-coded by goal relevance */}
           {activeTab === 'Events' &&
-            events.map((event) => (
-              <Marker
-                key={`event-${event.id}`}
-                coordinate={{ latitude: event.lat, longitude: event.lng }}
-                onPress={() => goToEvent(event.id)}
-              >
-                <View style={styles.eventMarker}>
-                  <Text style={styles.eventMarkerText}>📅</Text>
-                </View>
-              </Marker>
-            ))}
+            events.map((event) => {
+              const color = getRelevanceColor(event.goal_relevance_score);
+              const pct = event.goal_relevance_score != null
+                ? `${Math.round(event.goal_relevance_score * 100)}%`
+                : null;
+              return (
+                <Marker
+                  key={`event-${event.id}`}
+                  coordinate={{ latitude: event.lat, longitude: event.lng }}
+                  onPress={() => setSelectedEvent(event)}
+                >
+                  <View style={[styles.eventMarker, { borderColor: color }]}>
+                    <Text style={styles.eventMarkerText}>📅</Text>
+                    {pct && (
+                      <View style={[styles.relevanceBadge, { backgroundColor: color }]}>
+                        <Text style={styles.relevanceBadgeText}>{pct}</Text>
+                      </View>
+                    )}
+                  </View>
+                </Marker>
+              );
+            })}
 
           {/* Friend presence pins (at event location, not GPS) */}
           {activeTab === 'People' &&
@@ -278,6 +319,23 @@ export default function MapScreen() {
         </View>
       )}
 
+      {/* Relevance legend — shown on Events tab */}
+      {activeTab === 'Events' && !loading && (
+        <View style={styles.legend}>
+          {[
+            { color: '#7C3AED', label: 'Top match (80%+)' },
+            { color: '#F59E0B', label: 'Good (50–79%)' },
+            { color: '#3B82F6', label: 'Partial (20–49%)' },
+            { color: '#6B7280', label: 'Low / no data' },
+          ].map(({ color, label }) => (
+            <View key={color} style={styles.legendRow}>
+              <View style={[styles.legendDot, { backgroundColor: color }]} />
+              <Text style={styles.legendLabel}>{label}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* Ghost mode FAB */}
       <TouchableOpacity
         style={[styles.ghostFab, ghostMode && styles.ghostFabActive]}
@@ -350,8 +408,36 @@ const styles = StyleSheet.create({
     padding: 6,
     borderWidth: 2,
     borderColor: Colors.primary,
+    alignItems: 'center',
   },
   eventMarkerText: { fontSize: 16 },
+  relevanceBadge: {
+    position: 'absolute',
+    bottom: -8,
+    right: -8,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  relevanceBadgeText: { color: '#fff', fontSize: 8, fontWeight: '800' },
+  relevanceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  relevanceDot: { width: 8, height: 8, borderRadius: 4 },
+  relevanceRowText: { fontSize: 12, fontWeight: '700' },
+  relevanceDetail: { color: Colors.muted, fontSize: 11, marginBottom: 6, fontStyle: 'italic' },
+  legend: {
+    position: 'absolute',
+    top: 110,
+    right: 12,
+    backgroundColor: Colors.card + 'EE',
+    borderRadius: 10,
+    padding: 8,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendLabel: { color: Colors.subtext, fontSize: 10, fontWeight: '500' },
 
   userMarker: {
     width: 36,

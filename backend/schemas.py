@@ -28,6 +28,8 @@ class EventOut(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     tags: List[TagOut] = []
+    goal_relevance_score: Optional[float] = None
+    goal_relevance_label: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -64,6 +66,7 @@ class GoalCreate(BaseModel):
     social_intent: Optional[str] = None
     interests: Optional[List[str]] = []
     social_pref_note: Optional[str] = None
+    timeline: Optional[str] = None  # "This semester" | "This academic year" | "By graduation"
 
 
 class GoalOut(BaseModel):
