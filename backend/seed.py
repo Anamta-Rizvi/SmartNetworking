@@ -7,7 +7,7 @@ models.Base.metadata.create_all(bind=engine)
 def seed():
     db = SessionLocal()
 
-    if db.query(models.Tag).count() > 0:
+    if db.query(models.Tag).count() > 0 and db.query(models.User).count() > 0:
         print("Database already seeded.")
         db.close()
         return
@@ -52,10 +52,49 @@ def seed():
     ]
 
     tag_objects = {}
-    for name, category in tags_data:
-        tag = models.Tag(name=name, category=category)
-        db.add(tag)
-        tag_objects[name] = tag
+    if db.query(models.Tag).count() == 0:
+        for name, category in tags_data:
+            tag = models.Tag(name=name, category=category)
+            db.add(tag)
+            tag_objects[name] = tag
+        db.flush()
+    else:
+        for tag in db.query(models.Tag).all():
+            tag_objects[tag.name] = tag
+
+    # --- Dummy Users ---
+    dummy_users = [
+        ("Priya Sharma", "priya.sharma@rutgers.edu", "Computer Science", 2027, ["software-engineering", "data-science", "chess"]),
+        ("Marcus Johnson", "marcus.j@rutgers.edu", "Finance", 2026, ["finance", "consulting", "networking"]),
+        ("Sofia Reyes", "sofia.r@rutgers.edu", "Psychology", 2028, ["yoga", "mental-health", "art"]),
+        ("Ethan Kim", "ethan.kim@rutgers.edu", "Computer Science", 2027, ["software-engineering", "gaming", "music"]),
+        ("Aisha Patel", "aisha.p@rutgers.edu", "Marketing", 2026, ["marketing", "photography", "mixer"]),
+        ("Jordan Lee", "jordan.l@rutgers.edu", "Business", 2027, ["entrepreneurship", "networking", "consulting"]),
+        ("Zoe Chen", "zoe.chen@rutgers.edu", "Design", 2028, ["design", "art", "film"]),
+        ("Liam Torres", "liam.t@rutgers.edu", "Computer Science", 2026, ["software-engineering", "climbing", "hiking"]),
+        ("Nadia Williams", "nadia.w@rutgers.edu", "Biology", 2027, ["research", "wellness", "meditation"]),
+        ("Dev Anand", "dev.a@rutgers.edu", "Computer Science", 2027, ["data-science", "product-management", "chess"]),
+        ("Maya Foster", "maya.f@rutgers.edu", "Communications", 2028, ["marketing", "film", "photography"]),
+        ("Chris Park", "chris.p@rutgers.edu", "Finance", 2026, ["finance", "fitness", "networking"]),
+    ]
+
+    user_objects = []
+    for display_name, email, major, grad_year, interest_names in dummy_users:
+        user = models.User(
+            display_name=display_name,
+            email=email,
+            major=major,
+            grad_year=grad_year,
+            university="Rutgers",
+        )
+        db.add(user)
+        db.flush()
+
+        for interest_name in interest_names:
+            if interest_name in tag_objects:
+                db.add(models.UserInterest(user_id=user.id, tag_id=tag_objects[interest_name].id))
+
+        user_objects.append(user)
 
     db.flush()
 
@@ -88,124 +127,127 @@ def seed():
 
     # --- Events ---
 
-    # NYU campus coordinate reference (Washington Square area):
-    # Kimmel Center:           40.7295, -74.0010
-    # Bobst Library:           40.7293, -74.0004
-    # Warren Weaver Hall:      40.7286, -74.0010
-    # Stern / Tisch Hall:      40.7290, -74.0038
-    # Palladium (14th St):     40.7322, -73.9869
-    # Global Center (GCASL):   40.7287, -73.9987
-    # Lipton Hall:             40.7296, -73.9994
-    # Third North:             40.7302, -73.9998
-    # Clive Davis Institute:   40.7276, -74.0006
-    # Tandon (Brooklyn):       40.6942, -73.9857
-    # Wasserman Center:        40.7294, -73.9996
+    # Rutgers New Brunswick campus coordinate reference:
+    # College Ave Student Center:   40.4986, -74.4470
+    # Alexander Library:            40.5007, -74.4473
+    # Hill Center (CS/Math):        40.5226, -74.4618
+    # Rutgers Business School:      40.5001, -74.4460
+    # Livingston Student Center:    40.5250, -74.4338
+    # Rutgers SAC:                  40.5018, -74.4519
+    # Hardenbergh Hall:             40.5009, -74.4451
+    # Busch Student Center:         40.5233, -74.4661
+    # Mason Gross School of Arts:   40.4981, -74.4417
+    # Livingston Campus:            40.5250, -74.4338
+    # Career Services (ASB II):     40.5007, -74.4479
+    # Rutgers Athletic Center (RAC):40.5257, -74.4618
+    # Zimmerli Art Museum:          40.4999, -74.4474
+    # Douglass Campus Center:       40.4752, -74.4411
 
     # Day 0 — April 9
     add_event(
         "Tech Career Fair — Spring 2026",
-        "Meet recruiters from 30+ top tech companies including Google, Meta, Stripe, and NYC startups. Bring resumes, wear business casual.",
-        "Kimmel Center, NYU",
-        "NYU Wasserman Center",
+        "Meet recruiters from 30+ top tech companies including Google, Meta, Stripe, and NJ startups. Bring resumes, wear business casual.",
+        "College Ave Student Center, Rutgers",
+        "Rutgers Career Services",
         dt(0, 10), dt(0, 15),
         ["software-engineering", "networking", "product-management", "data-science"],
-        rsvp_count=312, lat=40.7295, lng=-74.0010,
+        rsvp_count=312, lat=40.4986, lng=-74.4470,
     )
     add_event(
         "Chess Club Weekly Meetup",
         "Casual games for all skill levels. Beginners welcome — we'll teach you the basics. Blitz rounds at the end.",
-        "Bobst Library, Room 201",
-        "NYU Chess Club",
+        "Alexander Library, Room 201",
+        "Rutgers Chess Club",
         dt(0, 18), dt(0, 20),
         ["chess", "community"],
-        rsvp_count=24, lat=40.7293, lng=-74.0004,
+        rsvp_count=24, lat=40.5007, lng=-74.4473,
     )
     add_event(
-        "Morning Yoga on the Rooftop",
+        "Morning Yoga on the Quad",
         "Start your Thursday right with a 45-minute flow session. Mats provided. All levels welcome.",
-        "Palladium Rooftop, NYU",
-        "NYU Wellness Club",
+        "Livingston Student Center Lawn",
+        "Rutgers Wellness Club",
         dt(0, 7, 30), dt(0, 8, 30),
         ["yoga", "wellness", "fitness"],
-        rsvp_count=18, lat=40.7322, lng=-73.9869,
+        rsvp_count=18, lat=40.5250, lng=-74.4338,
     )
 
     # Day 1 — April 10
     add_event(
         "Intro to Machine Learning Workshop",
         "Hands-on workshop covering ML fundamentals, scikit-learn, and a live kaggle mini-challenge. Bring a laptop.",
-        "Warren Weaver Hall, Room 101",
-        "NYU AI Society",
+        "Hill Center, Room 116",
+        "Rutgers AI Society",
         dt(1, 14), dt(1, 17),
         ["data-science", "software-engineering", "workshop"],
-        rsvp_count=87, lat=40.7286, lng=-74.0010,
+        rsvp_count=87, lat=40.5226, lng=-74.4618,
     )
     add_event(
         "Finance Networking Night",
         "Connect with professionals from Goldman Sachs, JP Morgan, and boutique banks. Panel + open networking. Business formal.",
-        "Stern School of Business, Tisch Hall",
-        "NYU Finance Club",
+        "Rutgers Business School, Levin Building",
+        "Rutgers Finance Club",
         dt(1, 18, 30), dt(1, 21),
         ["finance", "networking", "consulting"],
-        rsvp_count=145, lat=40.7290, lng=-74.0038,
+        rsvp_count=145, lat=40.5001, lng=-74.4460,
     )
     add_event(
-        "Friday Photography Walk — SoHo",
-        "Explore SoHo's streets and architecture through your lens. Any camera welcome — iPhone counts! Group debrief at a café after.",
-        "Meet at Spring St. Station Exit",
-        "NYU Photo Society",
+        "Photography Walk — New Brunswick",
+        "Explore New Brunswick's streets and architecture through your lens. Any camera welcome — iPhone counts! Group debrief at a café after.",
+        "Meet at George Street Corner",
+        "Rutgers Photo Society",
         dt(1, 15), dt(1, 17, 30),
         ["photography", "art", "community"],
-        rsvp_count=31, lat=40.7261, lng=-74.0008,
+        rsvp_count=31, lat=40.4957, lng=-74.4510,
     )
 
     # Day 2 — April 11
     add_event(
-        "Founder Stories: Building in NYC",
+        "Founder Stories: Building in NJ",
         "Three founders share honest stories — what worked, what failed, and how they kept going. Q&A + networking after.",
-        "Entrepreneurship Lab, NYU Tandon",
-        "NYU Entrepreneurs",
+        "Rutgers Business School, Entrepreneurship Lab",
+        "Rutgers Entrepreneurs",
         dt(2, 17), dt(2, 19, 30),
         ["entrepreneurship", "networking", "marketing"],
-        rsvp_count=93, lat=40.6942, lng=-73.9857,
+        rsvp_count=93, lat=40.5001, lng=-74.4460,
     )
     add_event(
         "Weekend Game Night",
         "Board games, card games, and a Mario Kart tournament. Come solo or bring friends. Pizza provided.",
-        "Lipton Hall Common Room",
-        "NYU Social Club",
+        "Hardenbergh Hall Common Room",
+        "Rutgers Social Club",
         dt(2, 19), dt(2, 23),
         ["game-night", "gaming", "community"],
-        rsvp_count=56, lat=40.7296, lng=-73.9994,
+        rsvp_count=56, lat=40.5009, lng=-74.4451,
     )
     add_event(
         "Open Mic Night",
         "Acoustic sets, spoken word, comedy — all welcome. Sign up for a 5-minute slot or just come to vibe.",
-        "Kimmel Underground, NYU",
-        "NYU Arts Collective",
+        "College Ave Student Center Underground",
+        "Rutgers Arts Collective",
         dt(2, 20), dt(2, 23),
         ["music", "art", "community"],
-        rsvp_count=72, lat=40.7295, lng=-74.0010,
+        rsvp_count=72, lat=40.4986, lng=-74.4470,
     )
 
     # Day 3 — April 12
     add_event(
         "Sunday Meditation & Mindfulness",
         "Guided 30-minute meditation followed by a group journaling session. Cushions and tea provided.",
-        "Global Center for Academic & Spiritual Life",
-        "NYU Mindfulness Club",
+        "Rutgers SAC, Quiet Room",
+        "Rutgers Mindfulness Club",
         dt(3, 10), dt(3, 11, 30),
         ["meditation", "mental-health", "wellness"],
-        rsvp_count=21, lat=40.7287, lng=-73.9987,
+        rsvp_count=21, lat=40.5018, lng=-74.4519,
     )
     add_event(
         "Cooking Class: Ramen from Scratch",
         "Learn to make tonkotsu broth, chashu pork, and soft-boiled eggs. Hands-on, all ingredients provided.",
-        "Palladium Kitchen Lab",
-        "NYU Food & Culture Club",
+        "Douglass Campus Center Kitchen Lab",
+        "Rutgers Food & Culture Club",
         dt(3, 14), dt(3, 16, 30),
         ["cooking", "community", "hobby"],
-        rsvp_count=28, lat=40.7322, lng=-73.9869,
+        rsvp_count=28, lat=40.4752, lng=-74.4411,
     )
 
     # Day 4 — April 13
@@ -213,7 +255,7 @@ def seed():
         "Product Management 101",
         "What does a PM actually do? A Google PM walks through the role, a mock PRD, and career paths. Q&A included.",
         "Zoom (Virtual)",
-        "NYU Product Society",
+        "Rutgers Product Society",
         dt(4, 12), dt(4, 13, 30),
         ["product-management", "workshop", "software-engineering"],
         is_virtual=True, rsvp_count=204,
@@ -221,80 +263,80 @@ def seed():
     add_event(
         "Speed Friending — Meet New People",
         "Like speed dating but for friendships. Rotate through 10 conversations, 3 minutes each. Fun, low-pressure, and surprisingly effective.",
-        "Kimmel Center, 4th Floor Lounge",
-        "NYU Social Connection",
+        "College Ave Student Center, 4th Floor Lounge",
+        "Rutgers Social Connection",
         dt(4, 18), dt(4, 20),
         ["speed-friending", "mixer", "community"],
-        rsvp_count=67, lat=40.7295, lng=-74.0010,
+        rsvp_count=67, lat=40.4986, lng=-74.4470,
     )
 
     # Day 5 — April 14
     add_event(
         "UX Design Portfolio Workshop",
         "Review real portfolios, learn what recruiters look for, and get live feedback on your own work from a senior designer at Figma.",
-        "370 Jay St, Brooklyn (Tandon)",
-        "NYU Design Guild",
+        "Livingston Campus, Lucy Stone Hall",
+        "Rutgers Design Guild",
         dt(5, 15), dt(5, 17, 30),
         ["design", "workshop", "product-management"],
-        rsvp_count=49, lat=40.6926, lng=-73.9874,
+        rsvp_count=49, lat=40.5250, lng=-74.4338,
     )
     add_event(
-        "Rock Climbing Intro — Brooklyn Boulders",
-        "First time? No problem. Experienced climbers will belay and teach technique. Shoes and harness included in the $15 group rate.",
-        "Brooklyn Boulders, Gowanus",
-        "NYU Outdoor Adventure Club",
+        "Rock Climbing Intro — Rail Bouldering",
+        "First time? No problem. Experienced climbers will teach technique. Shoes and harness included.",
+        "Rutgers RAC, Climbing Wall",
+        "Rutgers Outdoor Adventure Club",
         dt(5, 16), dt(5, 19),
         ["climbing", "fitness", "community"],
-        rsvp_count=22, lat=40.6737, lng=-73.9837,
+        rsvp_count=22, lat=40.5257, lng=-74.4618,
     )
     add_event(
         "Consulting Case Practice Session",
         "Practice McKinsey-style cases with peers. Structured 45-minute pairs, then group debrief. Facilitator from a MBB firm.",
-        "Stern School, Room 2-90",
-        "NYU Consulting Club",
+        "Rutgers Business School, Room 2-90",
+        "Rutgers Consulting Club",
         dt(5, 17), dt(5, 19, 30),
         ["consulting", "networking", "workshop"],
-        rsvp_count=61, lat=40.7290, lng=-74.0038,
+        rsvp_count=61, lat=40.5001, lng=-74.4460,
     )
 
     # Day 6 — April 15
     add_event(
-        "NYC Startup Mixer — Spring Edition",
-        "300+ founders, engineers, and investors in one room. Hosted at a Chelsea rooftop. Open bar for the first hour.",
-        "Chelsea Rooftop, 450 W 33rd St",
-        "NY Tech Alliance",
+        "NJ Startup Mixer — Spring Edition",
+        "300+ founders, engineers, and investors in one room. Hosted at a rooftop in New Brunswick. Open bar for the first hour.",
+        "The Heldrich Hotel Rooftop, New Brunswick",
+        "NJ Tech Alliance",
         dt(6, 19), dt(6, 22),
         ["entrepreneurship", "networking", "software-engineering"],
-        rsvp_count=288, lat=40.7509, lng=-73.9996,
+        rsvp_count=288, lat=40.4957, lng=-74.4490,
     )
     add_event(
         "Indie Film Screening + Discussion",
         "Screening of 'Past Lives' followed by a 30-minute director Q&A (recorded) and audience discussion. Popcorn provided.",
-        "Cantor Film Center, NYU",
-        "NYU Film Society",
+        "Mason Gross School of Arts, Black Box Theater",
+        "Rutgers Film Society",
         dt(6, 18), dt(6, 21),
         ["film", "art", "community"],
-        rsvp_count=85, lat=40.7298, lng=-74.0015,
+        rsvp_count=85, lat=40.4981, lng=-74.4417,
     )
 
     # Day 7 — April 16
     add_event(
         "Data Science Career Panel",
         "Four data scientists from finance, healthcare, and tech share their paths and answer your questions.",
-        "Courant Institute, Room 109",
-        "NYU Data Science Association",
+        "Hill Center, Room 124",
+        "Rutgers Data Science Association",
         dt(7, 16), dt(7, 18),
         ["data-science", "networking", "research"],
-        rsvp_count=112, lat=40.7286, lng=-74.0010,
+        rsvp_count=112, lat=40.5226, lng=-74.4618,
     )
     add_event(
-        "Hiking Trip — Palisades Interstate Park",
-        "10-mile moderate hike with Hudson River views. Bus leaves from campus at 8am. $12 for transport. Bring snacks and water.",
-        "Departs from Bobst Library Steps",
-        "NYU Outdoor Adventure Club",
+        "Hiking Trip — Delaware Water Gap",
+        "10-mile moderate hike with scenic views. Bus leaves from College Ave at 8am. $12 for transport. Bring snacks and water.",
+        "Departs from College Ave Student Center",
+        "Rutgers Outdoor Adventure Club",
         dt(7, 8), dt(7, 18),
         ["hiking", "fitness", "community"],
-        rsvp_count=34, lat=40.7293, lng=-74.0004,
+        rsvp_count=34, lat=40.4986, lng=-74.4470,
     )
 
     # Day 8 — April 17
@@ -302,7 +344,7 @@ def seed():
         "Marketing in the Age of AI",
         "How are brands using GPT, Midjourney, and personalization at scale? Panel of 3 CMOs + live demos.",
         "Zoom (Virtual)",
-        "NYU Marketing Association",
+        "Rutgers Marketing Association",
         dt(8, 12), dt(8, 14),
         ["marketing", "workshop", "data-science"],
         is_virtual=True, rsvp_count=176,
@@ -310,140 +352,140 @@ def seed():
     add_event(
         "Art Journaling Drop-In",
         "No art experience needed. Supplies provided. A quiet 2-hour session to draw, collage, or just doodle while music plays.",
-        "Kimmel Center, Art Room",
-        "NYU Arts Collective",
+        "Zimmerli Art Museum, Workshop Room",
+        "Rutgers Arts Collective",
         dt(8, 15), dt(8, 17),
         ["art", "mental-health", "wellness"],
-        rsvp_count=19, lat=40.7295, lng=-74.0010,
+        rsvp_count=19, lat=40.4999, lng=-74.4474,
     )
     add_event(
-        "Hackathon Info Session — HackNYU 2026",
-        "Everything you need to know about HackNYU: tracks, prizes, team formation, and tips from last year's winners.",
-        "Tandon Makerspace",
-        "HackNYU Team",
+        "Hackathon Info Session — HackRU 2026",
+        "Everything you need to know about HackRU: tracks, prizes, team formation, and tips from last year's winners.",
+        "Busch Student Center, Main Hall",
+        "HackRU Team",
         dt(8, 17), dt(8, 18, 30),
         ["software-engineering", "entrepreneurship", "workshop"],
-        rsvp_count=143, lat=40.6942, lng=-73.9857,
+        rsvp_count=143, lat=40.5233, lng=-74.4661,
     )
 
     # Day 9 — April 18
     add_event(
         "Internship Search Strategy Session",
         "Resume review + LinkedIn optimization + cold outreach templates. Bring your resume. Limited to 20 students.",
-        "Wasserman Center, Room 3B",
-        "NYU Wasserman Center",
+        "Career Services, ASB II",
+        "Rutgers Career Services",
         dt(9, 13), dt(9, 15),
         ["networking", "workshop", "software-engineering"],
-        rsvp_count=20, lat=40.7294, lng=-73.9996,
+        rsvp_count=20, lat=40.5007, lng=-74.4479,
     )
     add_event(
-        "Saturday Morning Run — Central Park",
-        "5-mile easy run through the park. All paces welcome — we split into groups. Post-run coffee at Bluestone Lane.",
-        "Meet at Columbus Circle",
-        "NYU Running Club",
+        "Saturday Morning Run — Rutgers Campus",
+        "5-mile easy run through campus. All paces welcome — we split into groups. Post-run coffee at Harvest Moon.",
+        "Meet at College Ave Student Center Steps",
+        "Rutgers Running Club",
         dt(9, 8), dt(9, 10),
         ["fitness", "community", "wellness"],
-        rsvp_count=41, lat=40.7681, lng=-73.9819,
+        rsvp_count=41, lat=40.4986, lng=-74.4470,
     )
 
     # Day 10 — April 19
     add_event(
         "Music Production Open Lab",
         "Ableton stations available. Bring headphones or use studio monitors. Experienced producers on hand for help. Drop in anytime.",
-        "Clive Davis Institute, Studio B",
-        "NYU Music Tech",
+        "Mason Gross School of Arts, Studio B",
+        "Rutgers Music Tech",
         dt(10, 14), dt(10, 18),
         ["music", "art", "workshop"],
-        rsvp_count=33, lat=40.7276, lng=-74.0006,
+        rsvp_count=33, lat=40.4981, lng=-74.4417,
     )
     add_event(
         "Venture Capital 101 — How Startups Get Funded",
         "A VC from Andreessen Horowitz breaks down term sheets, valuation, and how to get on a VC's radar as a student founder.",
-        "Stern School, Kaufman Management Center",
-        "NYU Entrepreneurs",
+        "Rutgers Business School, Levin Auditorium",
+        "Rutgers Entrepreneurs",
         dt(10, 16), dt(10, 18),
         ["entrepreneurship", "finance", "networking"],
-        rsvp_count=189, lat=40.7290, lng=-74.0038,
+        rsvp_count=189, lat=40.5001, lng=-74.4460,
     )
 
     # Day 11 — April 20
     add_event(
         "Peer Tutoring — Algorithms & Data Structures",
         "TA-led group session covering graphs, dynamic programming, and common interview patterns. Bring questions.",
-        "Warren Weaver Hall, Room 312",
-        "NYU CS Department",
+        "Hill Center, Room 312",
+        "Rutgers CS Department",
         dt(11, 17), dt(11, 19),
         ["study-group", "software-engineering", "research"],
-        rsvp_count=38, lat=40.7286, lng=-74.0010,
+        rsvp_count=38, lat=40.5226, lng=-74.4618,
     )
     add_event(
         "International Food Festival",
         "Student orgs from 20+ countries serve traditional dishes. Free entry. Live performances throughout the afternoon.",
-        "Kimmel Center Plaza",
-        "NYU Global Cultural Council",
+        "College Ave Student Center Plaza",
+        "Rutgers Global Cultural Council",
         dt(11, 12), dt(11, 17),
         ["cooking", "community", "mixer"],
-        rsvp_count=402, lat=40.7295, lng=-74.0010,
+        rsvp_count=402, lat=40.4986, lng=-74.4470,
     )
 
     # Day 12 — April 21
     add_event(
         "UX Research Methods Workshop",
         "Learn user interviews, affinity mapping, and usability testing. Run a mini-study on a live prototype.",
-        "370 Jay St, Brooklyn",
-        "NYU Design Guild",
+        "Livingston Campus, Lucy Stone Hall",
+        "Rutgers Design Guild",
         dt(12, 14), dt(12, 17),
         ["design", "research", "workshop"],
-        rsvp_count=44, lat=40.6926, lng=-73.9874,
+        rsvp_count=44, lat=40.5250, lng=-74.4338,
     )
     add_event(
         "Trivia Night — Mix & Match Teams",
-        "Random team assignments = instant new friends. Categories: pop culture, science, NYC history, and memes.",
-        "Third North Lounge",
-        "NYU Residential Life",
+        "Random team assignments = instant new friends. Categories: pop culture, science, NJ history, and memes.",
+        "Busch Student Center Lounge",
+        "Rutgers Residential Life",
         dt(12, 19), dt(12, 21, 30),
         ["game-night", "mixer", "community"],
-        rsvp_count=79, lat=40.7302, lng=-73.9998,
+        rsvp_count=79, lat=40.5233, lng=-74.4661,
     )
 
     # Day 13 — April 22
     add_event(
         "Wall Street Women in Finance Panel",
         "Five senior women in finance share their journeys, mentorship insights, and advice for breaking in.",
-        "Stern School, Tisch Hall Auditorium",
-        "NYU Women in Finance",
+        "Rutgers Business School, Levin Auditorium",
+        "Rutgers Women in Finance",
         dt(13, 17, 30), dt(13, 19, 30),
         ["finance", "networking", "consulting"],
-        rsvp_count=167, lat=40.7290, lng=-74.0038,
+        rsvp_count=167, lat=40.5001, lng=-74.4460,
     )
     add_event(
-        "Sunset Rooftop Social — End of Week",
-        "Wind down the week on a rooftop with good music, snacks, and no agenda. Just show up and meet people.",
-        "Palladium Rooftop, NYU",
-        "NYU Social Connection",
+        "Sunset Quad Social — End of Week",
+        "Wind down the week on the quad with good music, snacks, and no agenda. Just show up and meet people.",
+        "College Ave Quad",
+        "Rutgers Social Connection",
         dt(13, 18), dt(13, 21),
         ["mixer", "community", "speed-friending"],
-        rsvp_count=95, lat=40.7322, lng=-73.9869,
+        rsvp_count=95, lat=40.4992, lng=-74.4465,
     )
 
     # Day 14 — April 23
     add_event(
         "Intro to Meditation — 4-Week Series Kickoff",
         "Week 1 of a structured 4-week series on mindfulness and stress reduction. No experience needed. Free.",
-        "Global Center for Academic & Spiritual Life",
-        "NYU Mindfulness Club",
+        "Rutgers SAC, Quiet Room",
+        "Rutgers Mindfulness Club",
         dt(14, 11), dt(14, 12, 30),
         ["meditation", "mental-health", "wellness"],
-        rsvp_count=27, lat=40.7287, lng=-73.9987,
+        rsvp_count=27, lat=40.5018, lng=-74.4519,
     )
     add_event(
-        "HackNYU 2026 — Opening Ceremony",
+        "HackRU 2026 — Opening Ceremony",
         "36-hour hackathon begins. Teams of 2–4. $30k in prizes. Tracks: climate, health, education, open. Food + caffeine covered.",
-        "Tandon School of Engineering",
-        "HackNYU Team",
+        "Livingston Student Center, Main Hall",
+        "HackRU Team",
         dt(14, 17), dt(16, 17),
         ["software-engineering", "entrepreneurship", "design", "data-science"],
-        rsvp_count=534, lat=40.6942, lng=-73.9857,
+        rsvp_count=534, lat=40.5250, lng=-74.4338,
     )
 
     db.commit()

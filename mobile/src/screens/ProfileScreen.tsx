@@ -1,8 +1,10 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 import React from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../constants/colors';
 import { TagChip } from '../components/TagChip';
 import { getUserRSVPs, getInterests } from '../api/users';
@@ -10,7 +12,9 @@ import { getGoal } from '../api/goals';
 import { fetchEvent } from '../api/events';
 import { fetchDashboard } from '../api/dashboard';
 import { getConnections, getPendingRequests } from '../api/connections';
+import { uploadAvatar } from '../api/uploads';
 import { useStore } from '../store/useStore';
+import { API_BASE } from '../api/client';
 
 const GOAL_TYPE_LABEL: Record<string, string> = {
   career: '💼 Career',
@@ -67,7 +71,28 @@ function RSVPItem({ eventId, navigation }: { eventId: number; navigation: any })
 }
 
 export function ProfileScreen({ navigation }: any) {
-  const { userId, displayName, email, major, gradYear, reset } = useStore();
+  const { userId, displayName, email, major, gradYear, avatarUrl, setAvatarUrl, reset } = useStore();
+
+  async function handleAvatarPress() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to set a profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    try {
+      const { avatar_url } = await uploadAvatar(userId!, result.assets[0].uri);
+      setAvatarUrl(avatar_url);
+    } catch (e: any) {
+      Alert.alert('Upload failed', e.message ?? 'Could not upload photo.');
+    }
+  }
 
   const goalQuery = useQuery({
     queryKey: ['goal', userId],
@@ -109,11 +134,23 @@ export function ProfileScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {displayName.charAt(0).toUpperCase()}
-          </Text>
-        </View>
+        <TouchableOpacity onPress={handleAvatarPress} activeOpacity={0.8}>
+          <View style={styles.avatar}>
+            {avatarUrl ? (
+              <Image
+                source={{ uri: `${API_BASE}${avatarUrl}` }}
+                style={styles.avatarImage}
+              />
+            ) : (
+              <Text style={styles.avatarText}>
+                {displayName.charAt(0).toUpperCase()}
+              </Text>
+            )}
+            <View style={styles.avatarEditBadge}>
+              <Text style={styles.avatarEditIcon}>📷</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
         <Text style={styles.name}>{displayName}</Text>
         <Text style={styles.email}>{email}</Text>
         {(major || gradYear) && (
@@ -245,7 +282,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
     marginBottom: 14,
   },
+  avatarImage: { width: 80, height: 80, borderRadius: 40 },
   avatarText: { color: '#fff', fontSize: 32, fontWeight: '800' },
+  avatarEditBadge: {
+    position: 'absolute', bottom: -2, right: -2,
+    backgroundColor: Colors.card, borderRadius: 12, padding: 3,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  avatarEditIcon: { fontSize: 12 },
   name: { color: Colors.text, fontSize: 22, fontWeight: '800', marginBottom: 4 },
   email: { color: Colors.subtext, fontSize: 14, marginBottom: 4 },
   meta: { color: Colors.muted, fontSize: 13, marginBottom: 8 },

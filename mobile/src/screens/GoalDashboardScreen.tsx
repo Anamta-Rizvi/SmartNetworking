@@ -1,3 +1,4 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -266,17 +267,35 @@ export default function GoalDashboardScreen({ navigation }: any) {
 
   if (isLoading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={Colors.primary} size="large" />
-      </View>
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
+            <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Goal Progress</Text>
+          <View style={{ width: 60 }} />
+        </View>
+        <View style={styles.centered}>
+          <ActivityIndicator color={Colors.primary} size="large" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (!dashboard) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.emptyText}>Set a goal to see your dashboard.</Text>
-      </View>
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
+            <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Goal Progress</Text>
+          <View style={{ width: 60 }} />
+        </View>
+        <View style={styles.centered}>
+          <Text style={styles.emptyText}>Set a goal to see your dashboard.</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -284,12 +303,19 @@ export default function GoalDashboardScreen({ navigation }: any) {
   const showSocial = ['social', 'both'].includes(dashboard.primary_type);
 
   return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Goal Progress</Text>
+        <View style={{ width: 60 }} />
+      </View>
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
     >
-      <Text style={styles.header}>Goal Progress</Text>
 
       {showCareer && (
         <TrackSection
@@ -324,12 +350,26 @@ export default function GoalDashboardScreen({ navigation }: any) {
         <Text style={styles.copilotBtnText}>Ask Copilot to review my progress</Text>
       </TouchableOpacity>
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: Colors.background },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  backBtn: { padding: 4, minWidth: 60 },
+  backText: { color: Colors.primaryLight, fontSize: 15, fontWeight: '600' },
+  headerTitle: { color: Colors.text, fontSize: 17, fontWeight: '700' },
   container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 20, paddingTop: 60, paddingBottom: 40 },
+  content: { padding: 20, paddingTop: 20, paddingBottom: 40 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
   header: { color: Colors.text, fontSize: 24, fontWeight: '800', marginBottom: 24 },
   trackSection: {

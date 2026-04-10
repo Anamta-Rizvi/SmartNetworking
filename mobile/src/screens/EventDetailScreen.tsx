@@ -1,7 +1,8 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, SafeAreaView, Alert,
+  ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Colors } from '../constants/colors';
@@ -10,6 +11,7 @@ import { fetchEvent } from '../api/events';
 import { createRSVP, getUserRSVPs } from '../api/users';
 import { fetchEventAttendees, sendConnectionRequest, RSVPAttendeeOut } from '../api/connections';
 import { useStore } from '../store/useStore';
+import { API_BASE } from '../api/client';
 
 function formatDateTime(dateStr: string) {
   const d = new Date(dateStr);
@@ -140,7 +142,11 @@ export function EventDetailScreen({ route, navigation }: any) {
               return (
                 <View key={a.user_id} style={styles.attendeeRow}>
                   <View style={styles.attendeeAvatar}>
-                    <Text style={styles.attendeeAvatarText}>{a.display_name.charAt(0).toUpperCase()}</Text>
+                    {a.avatar_url ? (
+                      <Image source={{ uri: `${API_BASE}${a.avatar_url}` }} style={styles.attendeeAvatarImg} />
+                    ) : (
+                      <Text style={styles.attendeeAvatarText}>{a.display_name.charAt(0).toUpperCase()}</Text>
+                    )}
                   </View>
                   <Text style={styles.attendeeName} numberOfLines={1}>{a.display_name}</Text>
                   {status === 'self' ? null : status === 'connected' ? (
@@ -229,7 +235,9 @@ const styles = StyleSheet.create({
   attendeeAvatar: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center',
+    overflow: 'hidden',
   },
+  attendeeAvatarImg: { width: 32, height: 32, borderRadius: 16 },
   attendeeAvatarText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   attendeeName: { color: Colors.text, fontSize: 14, flex: 1 },
   connectedBadge: {

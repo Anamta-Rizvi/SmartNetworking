@@ -22,7 +22,7 @@ export interface Message {
   content: string;
 }
 
-export async function streamCopilotChat(
+export function streamCopilotChat(
   userId: number,
   mode: CopilotMode,
   messages: Message[],
@@ -31,26 +31,15 @@ export async function streamCopilotChat(
   onDone: () => void,
   onSuggestion?: (suggestion: EventSuggestion) => void,
 ) {
-  const response = await fetch(`${API_BASE}/copilot/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId, mode, messages, context }),
-  });
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', `${API_BASE}/copilot/chat`, true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.responseType = 'text';
 
-  const reader = response.body?.getReader();
-  if (!reader) { onDone(); return; }
+  let cursor = 0; // how many chars of responseText we've already processed
 
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-
+  function processChunk(text: string) {
+    const lines = text.split('\n');
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue;
       const data = line.slice(6).trim();
@@ -62,5 +51,32 @@ export async function streamCopilotChat(
       } catch {}
     }
   }
-  onDone();
+
+  xhr.onprogress = () => {
+    const newText = xhr.responseText.slice(cursor);
+    cursor = xhr.responseText.length;
+    if (newText) processChunk(newText);
+  };
+
+  xhr.onload = () => {
+    // process anything not caught by onprogress
+    const remaining = xhr.responseText.slice(cursor);
+    if (remaining) processChunk(remaining);
+    onDone();
+  };
+
+  xhr.onerror = () => {
+    console.error('[Copilot] XHR error');
+    onChunk('Network error — could not reach the server.');
+    onDone();
+  };
+
+  xhr.ontimeout = () => {
+    onChunk('Request timed out.');
+    onDone();
+  };
+
+  xhr.timeout = 60000; // 60s
+
+  xhr.send(JSON.stringify({ user_id: userId, mode, messages, context }));
 }

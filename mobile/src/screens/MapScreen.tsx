@@ -7,11 +7,12 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  ScrollView,
+  Image,
   Platform,
 } from 'react-native';
 import MapView, { Marker, Heatmap, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useNavigation } from '@react-navigation/native';
 import { Colors } from '../constants/colors';
 import { useStore } from '../store/useStore';
 import { fetchMapEvents, updateLocation, clearLocation, MapEvent } from '../api/map';
@@ -20,14 +21,19 @@ import { fetchFriendPresence, FriendPresencePin } from '../api/connections';
 type MapTab = 'Events' | 'People' | 'Heatmap';
 type SharingDuration = '1hr' | '2hr' | 'untilLeave' | 'off';
 
-const NYU_REGION = {
-  latitude: 40.7295,
-  longitude: -74.0010,
-  latitudeDelta: 0.025,
-  longitudeDelta: 0.025,
+const RUTGERS_REGION = {
+  latitude: 40.5008,
+  longitude: -74.4474,
+  latitudeDelta: 0.04,
+  longitudeDelta: 0.04,
 };
 
-export default function MapScreen({ navigation }: any) {
+export default function MapScreen() {
+  const navigation = useNavigation<any>();
+  const goToEvent = (eventId: number) => {
+    navigation.getParent()?.navigate('EventDetail', { eventId }) ??
+    navigation.navigate('EventDetail', { eventId });
+  };
   const { userId, ghostMode, setGhostMode, setLocationSharingUntil } = useStore();
   const [activeTab, setActiveTab] = useState<MapTab>('Events');
   const [events, setEvents] = useState<MapEvent[]>([]);
@@ -118,7 +124,7 @@ export default function MapScreen({ navigation }: any) {
             style={styles.previewBtn}
             onPress={() => {
               setSelectedEvent(null);
-              navigation.navigate('EventDetail', { eventId: selectedEvent.id });
+              goToEvent(selectedEvent.id);
             }}
           >
             <Text style={styles.previewBtnText}>View Details</Text>
@@ -144,7 +150,7 @@ export default function MapScreen({ navigation }: any) {
           ref={mapRef}
           style={styles.map}
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-          initialRegion={NYU_REGION}
+          initialRegion={RUTGERS_REGION}
           showsUserLocation={!ghostMode}
           showsMyLocationButton={false}
           mapType="standard"
@@ -157,7 +163,7 @@ export default function MapScreen({ navigation }: any) {
               <Marker
                 key={`event-${event.id}`}
                 coordinate={{ latitude: event.lat, longitude: event.lng }}
-                onPress={() => setSelectedEvent(event)}
+                onPress={() => goToEvent(event.id)}
               >
                 <View style={styles.eventMarker}>
                   <Text style={styles.eventMarkerText}>📅</Text>
@@ -174,25 +180,50 @@ export default function MapScreen({ navigation }: any) {
                 onPress={() => { setSelectedFriend(pin); setSelectedEvent(null); }}
               >
                 <View style={styles.userMarker}>
-                  <Text style={styles.userMarkerText}>
-                    {pin.display_name.charAt(0).toUpperCase()}
-                  </Text>
+                  {pin.avatar_url ? (
+                    <Image
+                      source={{ uri: `http://10.0.0.236:8000${pin.avatar_url}` }}
+                      style={{ width: 32, height: 32, borderRadius: 16 }}
+                    />
+                  ) : (
+                    <Text style={styles.userMarkerText}>
+                      {pin.display_name.charAt(0).toUpperCase()}
+                    </Text>
+                  )}
                 </View>
               </Marker>
             ))}
 
-          {/* Heatmap */}
-          {activeTab === 'Heatmap' && heatmapPoints.length > 0 && (
-            <Heatmap
-              points={heatmapPoints}
-              opacity={0.7}
-              radius={50}
-              gradient={{
-                colors: ['#7C3AED', '#FF6B6B'],
-                startPoints: [0.1, 1.0],
-                colorMapSize: 256,
-              }}
-            />
+          {/* Heatmap — Android uses native Heatmap, iOS uses colored markers */}
+          {activeTab === 'Heatmap' && (
+            Platform.OS === 'android' ? (
+              heatmapPoints.length > 0 && (
+                <Heatmap
+                  points={heatmapPoints}
+                  opacity={0.7}
+                  radius={50}
+                  gradient={{ colors: ['#7C3AED', '#FF6B6B'], startPoints: [0.1, 1.0], colorMapSize: 256 }}
+                />
+              )
+            ) : (
+              events.map(event => {
+                const intensity = Math.min(event.rsvp_count / 100, 1);
+                const r = Math.round(124 + (255 - 124) * intensity);
+                const g = Math.round(58 + (107 - 58) * intensity);
+                const b = Math.round(237 + (107 - 237) * intensity);
+                return (
+                  <Marker
+                    key={`heat-${event.id}`}
+                    coordinate={{ latitude: event.lat, longitude: event.lng }}
+                    onPress={() => goToEvent(event.id)}
+                  >
+                    <View style={[styles.heatMarker, { backgroundColor: `rgb(${r},${g},${b})` }]}>
+                      <Text style={styles.heatMarkerText}>{event.rsvp_count}</Text>
+                    </View>
+                  </Marker>
+                );
+              })
+            )
           )}
         </MapView>
       )}
@@ -222,7 +253,7 @@ export default function MapScreen({ navigation }: any) {
               style={styles.previewBtn}
               onPress={() => {
                 setSelectedFriend(null);
-                navigation.navigate('EventDetail', { eventId: selectedFriend.event_id });
+                goToEvent(selectedFriend.event_id);
               }}
             >
               <Text style={styles.previewBtnText}>View Event</Text>
@@ -240,7 +271,7 @@ export default function MapScreen({ navigation }: any) {
           <Text style={styles.peopleEmptyText}>Connect with people to see where your friends are heading</Text>
           <TouchableOpacity
             style={styles.peopleEmptyBtn}
-            onPress={() => navigation.navigate('Connections')}
+            onPress={() => navigation.getParent()?.navigate('Connections') ?? navigation.navigate('Connections')}
           >
             <Text style={styles.peopleEmptyBtnText}>Find People</Text>
           </TouchableOpacity>
@@ -393,6 +424,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   peopleEmptyBtnText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
+
+  heatMarker: {
+    width: 36, height: 36, borderRadius: 18,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)',
+  },
+  heatMarkerText: { color: '#fff', fontSize: 10, fontWeight: '800' },
 
   ghostFab: {
     position: 'absolute',

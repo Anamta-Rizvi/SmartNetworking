@@ -26,17 +26,20 @@ export interface UserOut {
   major: string | null;
   grad_year: number | null;
   university: string;
+  avatar_url: string | null;
 }
 
 export interface RSVPAttendeeOut {
   user_id: number;
   display_name: string;
+  avatar_url: string | null;
   connection_status: string;
 }
 
 export interface FriendPresencePin {
   user_id: number;
   display_name: string;
+  avatar_url: string | null;
   event_id: number;
   event_title: string;
   event_location: string;
@@ -77,6 +80,15 @@ export async function removeConnection(connectionId: number, userId: number): Pr
 
 export async function searchUsers(q: string, userId: number): Promise<ConnectionUser[]> {
   return apiFetch<ConnectionUser[]>(`/connections/search?q=${encodeURIComponent(q)}&user_id=${userId}`);
+}
+
+export interface SuggestedUser extends ConnectionUser {
+  score: number;
+  reason: string;
+}
+
+export async function getSuggestions(userId: number): Promise<SuggestedUser[]> {
+  return apiFetch<SuggestedUser[]>(`/connections/${userId}/suggestions`);
 }
 
 export async function fetchEventAttendees(eventId: number, userId: number): Promise<RSVPAttendeeOut[]> {

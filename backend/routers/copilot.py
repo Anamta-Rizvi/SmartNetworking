@@ -206,6 +206,15 @@ async def copilot_chat(payload: schemas.CopilotChatRequest, db: Session = Depend
     for msg in payload.messages:
         messages.append({"role": msg.role, "content": msg.content})
 
+    # ── Log input ──────────────────────────────────────────────────────────────
+    print("\n" + "="*60)
+    print(f"[COPILOT] user_id={payload.user_id}  mode={mode}")
+    print(f"[COPILOT] SYSTEM PROMPT:\n{system_prompt}")
+    print(f"[COPILOT] MESSAGES ({len(messages)-1} turns):")
+    for m in messages[1:]:  # skip system
+        print(f"  [{m['role'].upper()}] {m['content']}")
+    print("="*60)
+
     async def stream_response():
         full_text = ""
         stream = client.chat.completions.create(
@@ -222,6 +231,10 @@ async def copilot_chat(payload: schemas.CopilotChatRequest, db: Session = Depend
             if delta:
                 full_text += delta
                 yield f"data: {json.dumps({'content': delta})}\n\n"
+
+        # ── Log output ─────────────────────────────────────────────────────────
+        print(f"\n[COPILOT] RESPONSE:\n{full_text}")
+        print("="*60 + "\n")
 
         # After streaming, check for event suggestion markers
         suggested_event = _find_event_suggestion(full_text, db)

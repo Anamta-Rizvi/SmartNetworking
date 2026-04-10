@@ -1,7 +1,8 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, SafeAreaView, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
   ScrollView, Animated,
 } from 'react-native';
 import { Audio } from 'expo-av';
@@ -139,7 +140,7 @@ export function CopilotScreen({ route }: any) {
     scrollToBottom();
 
     let fullResponse = '';
-    await streamCopilotChat(
+    streamCopilotChat(
       userId, mode, newMessages, {},
       (chunk) => {
         fullResponse += chunk;
@@ -199,49 +200,51 @@ export function CopilotScreen({ route }: any) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modeBar}>
-        {MODES.map(m => (
-          <TouchableOpacity
-            key={m.key}
-            style={[styles.modeChip, mode === m.key && styles.modeChipActive]}
-            onPress={() => setMode(m.key)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.modeEmoji}>{m.emoji}</Text>
-            <Text style={[styles.modeLabel, mode === m.key && styles.modeLabelActive]}>{m.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {messages.length === 0 && !isRecording && !transcribing && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyEmoji}>{selectedMode.emoji}</Text>
-          <Text style={styles.emptyTitle}>{selectedMode.label}</Text>
-          <Text style={styles.emptyDesc}>{selectedMode.desc}</Text>
-          <Text style={styles.emptyHint}>Type or tap the mic to speak</Text>
-        </View>
-      )}
-
-      {isRecording && (
-        <View style={styles.recordingOverlay}>
-          <Animated.View style={[styles.recordingPulse, { transform: [{ scale: pulseAnim }] }]} />
-          <Text style={styles.recordingText}>Listening...</Text>
-          <Text style={styles.recordingHint}>Tap mic again to stop</Text>
-        </View>
-      )}
-
-      {transcribing && (
-        <View style={styles.recordingOverlay}>
-          <ActivityIndicator color={Colors.primary} size="large" />
-          <Text style={styles.recordingText}>Transcribing...</Text>
-        </View>
-      )}
+      {/* Mode chips — fixed height so keyboard reflow can't stretch it */}
+      <View style={styles.modeBarContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modeBar}>
+          {MODES.map(m => (
+            <TouchableOpacity
+              key={m.key}
+              style={[styles.modeChip, mode === m.key && styles.modeChipActive]}
+              onPress={() => setMode(m.key)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modeEmoji}>{m.emoji}</Text>
+              <Text style={[styles.modeLabel, mode === m.key && styles.modeLabelActive]}>{m.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={0}
       >
+        {messages.length === 0 && !isRecording && !transcribing && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>{selectedMode.emoji}</Text>
+            <Text style={styles.emptyTitle}>{selectedMode.label}</Text>
+            <Text style={styles.emptyDesc}>{selectedMode.desc}</Text>
+            <Text style={styles.emptyHint}>Type or tap the mic to speak</Text>
+          </View>
+        )}
+
+        {isRecording && (
+          <View style={styles.recordingOverlay}>
+            <Animated.View style={[styles.recordingPulse, { transform: [{ scale: pulseAnim }] }]} />
+            <Text style={styles.recordingText}>Listening...</Text>
+            <Text style={styles.recordingHint}>Tap mic again to stop</Text>
+          </View>
+        )}
+
+        {transcribing && (
+          <View style={styles.recordingOverlay}>
+            <ActivityIndicator color={Colors.primary} size="large" />
+            <Text style={styles.recordingText}>Transcribing...</Text>
+          </View>
+        )}
         {messages.length > 0 && !isRecording && !transcribing && (
           <FlatList
             ref={flatListRef}
@@ -348,7 +351,8 @@ const styles = StyleSheet.create({
   },
   ttsBtnActive: { backgroundColor: Colors.surface, borderColor: Colors.primary },
   ttsBtnText: { fontSize: 18 },
-  modeBar: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  modeBarContainer: { height: 60, flexShrink: 0 },
+  modeBar: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center' },
   modeChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.card, borderRadius: 20,

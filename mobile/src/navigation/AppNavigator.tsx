@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
+import { getUser } from '../api/users';
 
 import { Colors } from '../constants/colors';
 import { useStore } from '../store/useStore';
@@ -85,7 +86,25 @@ function MainTabs() {
 }
 
 export function AppNavigator() {
-  const onboardingComplete = useStore(s => s.onboardingComplete);
+  const { onboardingComplete, userId, displayName, reset, setUser } = useStore();
+
+  // On app start, verify the stored userId still belongs to the stored email.
+  // Guards against DB resets where IDs shift to different users.
+  const { email: storedEmail } = useStore();
+  useEffect(() => {
+    if (!onboardingComplete || !userId || !storedEmail) return;
+    getUser(userId)
+      .then(user => {
+        if (user.email.toLowerCase() !== storedEmail.toLowerCase()) {
+          // ID exists but belongs to someone else — DB was wiped, reset
+          reset();
+        }
+      })
+      .catch(() => {
+        // User ID not found at all — reset to onboarding
+        reset();
+      });
+  }, []); // run once on mount
 
   return (
     <NavigationContainer>

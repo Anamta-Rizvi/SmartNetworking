@@ -39,7 +39,7 @@ class UserCreate(BaseModel):
     display_name: str
     major: Optional[str] = None
     grad_year: Optional[int] = None
-    university: Optional[str] = "NYU"
+    university: Optional[str] = "Rutgers"
 
 
 class UserOut(BaseModel):
@@ -49,6 +49,7 @@ class UserOut(BaseModel):
     major: Optional[str]
     grad_year: Optional[int]
     university: str
+    avatar_url: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -227,12 +228,14 @@ class ConnectionOut(BaseModel):
 class RSVPAttendeeOut(BaseModel):
     user_id: int
     display_name: str
+    avatar_url: Optional[str] = None
     connection_status: str  # "none" | "pending_sent" | "pending_received" | "connected"
 
 
 class FriendPresencePin(BaseModel):
     user_id: int
     display_name: str
+    avatar_url: Optional[str] = None
     event_id: int
     event_title: str
     event_location: str

@@ -37,7 +37,7 @@ export function StepAccount({ onNext }: Props) {
         email: email.trim().toLowerCase(),
         major: major.trim() || undefined,
         grad_year: gradYear ? parseInt(gradYear) : undefined,
-        university: 'NYU',
+        university: 'Rutgers',
       });
       setUser(user.id, user.display_name, user.email);
       setProfile(major, gradYear);
@@ -121,7 +121,7 @@ export function StepAccount({ onNext }: Props) {
           <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}
-            placeholder="alex@nyu.edu"
+            placeholder="alex@rutgers.edu"
             placeholderTextColor={Colors.muted}
             value={email}
             onChangeText={setEmail}

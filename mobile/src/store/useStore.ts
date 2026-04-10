@@ -15,6 +15,7 @@ interface UserState {
   onboardingComplete: boolean;
   ghostMode: boolean;
   locationSharingUntil: string | null; // ISO string
+  avatarUrl: string | null;
 
   setUser: (id: number, name: string, email: string) => void;
   setProfile: (major: string, gradYear: string) => void;
@@ -23,6 +24,7 @@ interface UserState {
   completeOnboarding: () => void;
   setGhostMode: (on: boolean) => void;
   setLocationSharingUntil: (until: string | null) => void;
+  setAvatarUrl: (url: string | null) => void;
   reset: () => void;
 }
 
@@ -41,6 +43,7 @@ export const useStore = create<UserState>()(
       onboardingComplete: false,
       ghostMode: false,
       locationSharingUntil: null,
+      avatarUrl: null,
 
       setUser: (id, name, email) => set({ userId: id, displayName: name, email }),
       setProfile: (major, gradYear) => set({ major, gradYear }),
@@ -49,11 +52,12 @@ export const useStore = create<UserState>()(
       completeOnboarding: () => set({ onboardingComplete: true }),
       setGhostMode: (on) => set({ ghostMode: on }),
       setLocationSharingUntil: (until) => set({ locationSharingUntil: until }),
+      setAvatarUrl: (url) => set({ avatarUrl: url }),
       reset: () => set({
         userId: null, displayName: '', email: '', major: '', gradYear: '',
         goalType: 'both', careerTrack: '', socialIntent: '',
         selectedTagIds: [], onboardingComplete: false,
-        ghostMode: false, locationSharingUntil: null,
+        ghostMode: false, locationSharingUntil: null, avatarUrl: null,
       }),
     }),
     {

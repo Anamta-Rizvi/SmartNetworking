@@ -24,6 +24,8 @@ def _event_with_tags(event: models.Event) -> schemas.EventOut:
         is_virtual=event.is_virtual,
         cover_image_url=event.cover_image_url,
         rsvp_count=event.rsvp_count,
+        lat=getattr(event, 'lat', None),
+        lng=getattr(event, 'lng', None),
         tags=tags,
     )
 
@@ -110,6 +112,7 @@ def get_attendees(
         result.append(schemas.RSVPAttendeeOut(
             user_id=attendee.id,
             display_name=attendee.display_name,
+            avatar_url=attendee.avatar_url,
             connection_status=status,
         ))
     return result

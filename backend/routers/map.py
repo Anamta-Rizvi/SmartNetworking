@@ -6,6 +6,7 @@ from typing import Optional
 import math
 import models
 import schemas
+from routers.events import _event_with_tags
 
 router = APIRouter(prefix="/map", tags=["Map"])
 
@@ -48,10 +49,7 @@ def map_events(
             models.Event.lng <= ne_lng,
         )
     events = query.order_by(models.Event.starts_at).all()
-    # Attach tags list for EventOut
-    for e in events:
-        e.tags = e.tags  # already loaded via relationship
-    return events
+    return [_event_with_tags(e) for e in events]
 
 
 @router.get("/users", response_model=list[schemas.FriendPresencePin])
@@ -91,6 +89,7 @@ def map_users(user_id: int = Query(...), db: Session = Depends(get_db)):
         result.append(schemas.FriendPresencePin(
             user_id=friend.id,
             display_name=friend.display_name,
+            avatar_url=friend.avatar_url,
             event_id=event.id,
             event_title=event.title,
             event_location=event.location,

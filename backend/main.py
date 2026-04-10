@@ -1,12 +1,14 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 load_dotenv()
 
 from database import engine
 import models
-from routers import events, users, goals, recommendations, copilot, map, notifications, connections
+from routers import events, users, goals, recommendations, copilot, map, notifications, connections, uploads
 from seed import seed
 
 models.Base.metadata.create_all(bind=engine)
@@ -30,6 +32,11 @@ app.include_router(copilot.router)
 app.include_router(map.router)
 app.include_router(notifications.router)
 app.include_router(connections.router)
+app.include_router(uploads.router)
+
+_uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(_uploads_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=_uploads_dir), name="static")
 
 
 @app.get("/")
