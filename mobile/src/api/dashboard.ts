@@ -49,6 +49,10 @@ export async function fetchDashboard(userId: number): Promise<GoalDashboard> {
   return apiFetch<GoalDashboard>(`/goals/${userId}/dashboard`);
 }
 
+export async function fetchGoalDashboard(userId: number, goalId: number): Promise<GoalDashboard> {
+  return apiFetch<GoalDashboard>(`/goals/${userId}/dashboard?goal_id=${goalId}`);
+}
+
 export async function addGoalEvent(
   userId: number,
   eventId: number,

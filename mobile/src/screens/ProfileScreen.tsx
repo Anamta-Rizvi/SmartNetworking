@@ -1,5 +1,6 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert,
   Modal, TextInput,
@@ -8,10 +9,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../constants/colors';
 import { TagChip } from '../components/TagChip';
-import { getUserRSVPs, getInterests } from '../api/users';
-import { getGoal } from '../api/goals';
+import { getUser, getInterests, getRsvpsWithConnections, RSVPWithConnections } from '../api/users';
+import { getGoals, updateGoalStatus, Goal } from '../api/goals';
 import { fetchEvent } from '../api/events';
-import { fetchDashboard } from '../api/dashboard';
 import { getConnections, getPendingRequests } from '../api/connections';
 import { uploadAvatar } from '../api/uploads';
 import { useStore } from '../store/useStore';
@@ -274,12 +274,14 @@ const GOAL_TYPE_LABEL: Record<string, string> = {
 };
 
 function UpcomingRSVPs({ userId, navigation }: { userId: number; navigation: any }) {
-  const { data: rsvps } = useQuery({
-    queryKey: ['rsvps', userId],
-    queryFn: () => getUserRSVPs(userId),
+  const { data: rsvpsWithConn = [] } = useQuery({
+    queryKey: ['rsvps-connections', userId],
+    queryFn: () => getRsvpsWithConnections(userId),
   });
 
-  const upcoming = rsvps?.slice(0, 3) ?? [];
+  const upcoming = rsvpsWithConn
+    .filter(r => new Date(r.event_starts_at) >= new Date())
+    .slice(0, 5);
 
   if (upcoming.length === 0) {
     return <Text style={styles.emptyText}>No RSVPs yet. Discover events on the Home tab.</Text>;
@@ -287,37 +289,116 @@ function UpcomingRSVPs({ userId, navigation }: { userId: number; navigation: any
 
   return (
     <View style={styles.rsvpList}>
-      {upcoming.map(rsvp => (
-        <RSVPItem key={rsvp.id} eventId={rsvp.event_id} navigation={navigation} />
+      {upcoming.map(r => (
+        <TouchableOpacity
+          key={r.rsvp_id}
+          style={styles.rsvpItem}
+          onPress={() => navigation.navigate('EventDetail', { eventId: r.event_id })}
+          activeOpacity={0.8}
+        >
+          <View style={styles.rsvpDot} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rsvpTitle} numberOfLines={1}>{r.event_title}</Text>
+            <Text style={styles.rsvpMeta}>
+              {new Date(r.event_starts_at).toLocaleDateString('en-US', {
+                weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+              })}
+              {r.event_location ? ` · ${r.event_location}` : ''}
+            </Text>
+            {r.connections_attending.length > 0 && (
+              <View style={styles.rsvpConnRow}>
+                <View style={{ flexDirection: 'row', gap: -6 }}>
+                  {r.connections_attending.slice(0, 3).map((c, i) => (
+                    <View key={c.user_id} style={[styles.rsvpConnAvatar, { zIndex: 10 - i }]}>
+                      <Text style={styles.rsvpConnLetter}>{c.display_name[0].toUpperCase()}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.rsvpConnText}>
+                  {r.connections_attending.length === 1
+                    ? `${r.connections_attending[0].display_name} is also going`
+                    : `${r.connections_attending[0].display_name} +${r.connections_attending.length - 1} connections going`}
+                </Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
       ))}
     </View>
   );
 }
 
-function RSVPItem({ eventId, navigation }: { eventId: number; navigation: any }) {
-  const { data: event } = useQuery({
-    queryKey: ['event', eventId],
-    queryFn: () => fetchEvent(eventId),
-  });
-
-  if (!event) return null;
-
+function GoalCard({ goal, onMarkDone, onMarkOngoing, navigation }: {
+  goal: Goal;
+  onMarkDone: (id: number) => void;
+  onMarkOngoing: (id: number) => void;
+  navigation: any;
+}) {
+  const isCompleted = goal.status === 'completed';
   return (
-    <TouchableOpacity
-      style={styles.rsvpItem}
-      onPress={() => navigation.navigate('EventDetail', { eventId })}
-      activeOpacity={0.8}
-    >
-      <View style={styles.rsvpDot} />
-      <View style={{ flex: 1 }}>
-        <Text style={styles.rsvpTitle} numberOfLines={1}>{event.title}</Text>
-        <Text style={styles.rsvpMeta}>
-          {new Date(event.starts_at).toLocaleDateString('en-US', {
-            weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-          })}
+    <View style={[styles.goalCard, !isCompleted && styles.goalCardCurrent, isCompleted && styles.goalCardCompleted]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <Text style={[styles.goalType, isCompleted && { color: Colors.muted }]}>
+          {GOAL_TYPE_LABEL[goal.primary_type] ?? goal.primary_type}
         </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={styles.goalDateText}>
+            {new Date(goal.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+          </Text>
+          <TouchableOpacity
+            style={[styles.goalStatusBtn, isCompleted && styles.goalStatusBtnCompleted]}
+            onPress={() => isCompleted ? onMarkOngoing(goal.id) : onMarkDone(goal.id)}
+          >
+            <Text style={[styles.goalStatusBtnText, isCompleted && styles.goalStatusBtnTextCompleted]}>
+              {isCompleted ? 'Completed' : 'Mark done'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </TouchableOpacity>
+
+      {/* Career section */}
+      {['career', 'both'].includes(goal.primary_type) && (
+        <View style={styles.goalSection}>
+          <Text style={styles.goalSectionHeader}>Career</Text>
+          {goal.career_track ? (
+            <View style={styles.goalRow}>
+              <Text style={styles.goalLabel}>Track</Text>
+              <Text style={[styles.goalValue, isCompleted && { color: Colors.muted }]}>{goal.career_track}</Text>
+            </View>
+          ) : (
+            <Text style={styles.goalEmpty}>No career track set</Text>
+          )}
+        </View>
+      )}
+
+      {/* Social section */}
+      {['social', 'both'].includes(goal.primary_type) && (
+        <View style={styles.goalSection}>
+          <Text style={styles.goalSectionHeader}>Social</Text>
+          {goal.social_intent ? (
+            <View style={styles.goalRow}>
+              <Text style={styles.goalLabel}>Looking for</Text>
+              <Text style={[styles.goalValue, isCompleted && { color: Colors.muted }]}>{goal.social_intent}</Text>
+            </View>
+          ) : (
+            <Text style={styles.goalEmpty}>No social intent set</Text>
+          )}
+          {goal.social_pref_note && (
+            <View style={styles.goalRow}>
+              <Text style={styles.goalLabel}>Preferences</Text>
+              <Text style={[styles.goalValue, isCompleted && { color: Colors.muted }]}>{goal.social_pref_note}</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      <TouchableOpacity
+        style={styles.seeProgressBtn}
+        onPress={() => navigation.navigate('Progress', { goalId: goal.id, primaryType: goal.primary_type })}
+      >
+        <Text style={styles.seeProgressText}>See Progress →</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -345,11 +426,24 @@ export function ProfileScreen({ navigation }: any) {
     }
   }
 
-  const goalQuery = useQuery({
-    queryKey: ['goal', userId],
-    queryFn: () => getGoal(userId!),
+  const userQuery = useQuery({
+    queryKey: ['user', userId],
+    queryFn: () => getUser(userId!),
     enabled: !!userId,
   });
+
+  const goalQuery = useQuery({
+    queryKey: ['goals', userId],
+    queryFn: () => getGoals(userId!),
+    enabled: !!userId,
+    staleTime: 0,
+  });
+
+  // Refetch goals every time this screen comes into focus
+  const refetchGoals = goalQuery.refetch;
+  useFocusEffect(useCallback(() => {
+    if (userId) refetchGoals();
+  }, [userId, refetchGoals]));
 
   const interestsQuery = useQuery({
     queryKey: ['interests', userId],
@@ -357,12 +451,6 @@ export function ProfileScreen({ navigation }: any) {
     enabled: !!userId,
   });
 
-  const dashboardQuery = useQuery({
-    queryKey: ['dashboard', userId],
-    queryFn: () => fetchDashboard(userId!),
-    enabled: !!userId,
-    retry: false,
-  });
 
   const connectionsQuery = useQuery({
     queryKey: ['connections', userId],
@@ -376,9 +464,17 @@ export function ProfileScreen({ navigation }: any) {
     enabled: !!userId,
   });
 
-  const goal = goalQuery.data;
+  const qcGoals = useQueryClient();
+  const goalStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: 'ongoing' | 'completed' }) =>
+      updateGoalStatus(id, status),
+    onSuccess: () => qcGoals.invalidateQueries({ queryKey: ['goals', userId] }),
+  });
+
+  const goals = goalQuery.data ?? [];
+  const ongoingGoals = goals.filter(g => g.status !== 'completed');
+  const completedGoals = goals.filter(g => g.status === 'completed');
   const interests = interestsQuery.data ?? [];
-  const dashboard = dashboardQuery.data;
   const connections = connectionsQuery.data ?? [];
   const pendingCount = pendingQuery.data?.length ?? 0;
 
@@ -403,6 +499,11 @@ export function ProfileScreen({ navigation }: any) {
           </View>
         </TouchableOpacity>
         <Text style={styles.name}>{displayName}</Text>
+        {userQuery.data?.title && (
+          <View style={styles.titleBadge}>
+            <Text style={styles.titleBadgeText}>{userQuery.data.title}</Text>
+          </View>
+        )}
         <Text style={styles.email}>{email}</Text>
         {(major || gradYear) && (
           <Text style={styles.meta}>
@@ -410,60 +511,42 @@ export function ProfileScreen({ navigation }: any) {
           </Text>
         )}
 
-        {goal && (
+        {goals.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Goals</Text>
-            <View style={styles.goalCard}>
-              <Text style={styles.goalType}>{GOAL_TYPE_LABEL[goal.primary_type] ?? goal.primary_type}</Text>
-              {goal.career_track && (
-                <View style={styles.goalRow}>
-                  <Text style={styles.goalLabel}>Track</Text>
-                  <Text style={styles.goalValue}>{goal.career_track}</Text>
+            <Text style={styles.sectionTitle}>Your Goals ({goals.length})</Text>
+            <View style={{ gap: 16 }}>
+              {ongoingGoals.length > 0 && (
+                <View style={{ gap: 10 }}>
+                  <Text style={styles.goalGroupLabel}>Ongoing</Text>
+                  {ongoingGoals.map(g => (
+                    <GoalCard
+                      key={g.id}
+                      goal={g}
+                      navigation={navigation}
+                      onMarkDone={id => goalStatusMutation.mutate({ id, status: 'completed' })}
+                      onMarkOngoing={id => goalStatusMutation.mutate({ id, status: 'ongoing' })}
+                    />
+                  ))}
                 </View>
               )}
-              {goal.social_intent && (
-                <View style={styles.goalRow}>
-                  <Text style={styles.goalLabel}>Looking for</Text>
-                  <Text style={styles.goalValue}>{goal.social_intent}</Text>
+              {completedGoals.length > 0 && (
+                <View style={{ gap: 10 }}>
+                  <Text style={styles.goalGroupLabel}>Completed</Text>
+                  {completedGoals.map(g => (
+                    <GoalCard
+                      key={g.id}
+                      goal={g}
+                      navigation={navigation}
+                      onMarkDone={id => goalStatusMutation.mutate({ id, status: 'completed' })}
+                      onMarkOngoing={id => goalStatusMutation.mutate({ id, status: 'ongoing' })}
+                    />
+                  ))}
                 </View>
               )}
             </View>
           </View>
         )}
 
-        {dashboard && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Goal Progress</Text>
-            <View style={styles.progressCard}>
-              {['career', 'both'].includes(dashboard.primary_type) && (
-                <View style={styles.progressRow}>
-                  <Text style={styles.progressLabel}>Career</Text>
-                  <View style={styles.progressTrack}>
-                    <View style={[styles.progressFill, { width: `${Math.round(dashboard.career_progress * 100)}%` }]} />
-                  </View>
-                  <Text style={styles.progressPct}>{Math.round(dashboard.career_progress * 100)}%</Text>
-                </View>
-              )}
-              {['social', 'both'].includes(dashboard.primary_type) && (
-                <View style={styles.progressRow}>
-                  <Text style={styles.progressLabel}>Social</Text>
-                  <View style={styles.progressTrack}>
-                    <View style={[styles.progressFill, { width: `${Math.round(dashboard.social_progress * 100)}%` }]} />
-                  </View>
-                  <Text style={styles.progressPct}>{Math.round(dashboard.social_progress * 100)}%</Text>
-                </View>
-              )}
-              <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
-                <TouchableOpacity onPress={() => navigation.navigate('GoalDashboard')}>
-                  <Text style={styles.progressLink}>Dashboard →</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigation.navigate('Progress')}>
-                  <Text style={[styles.progressLink, { color: Colors.success }]}>Progress & Referrals →</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
 
         {interests.length > 0 && (
           <View style={styles.section}>
@@ -567,10 +650,31 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card, borderRadius: 14, padding: 16,
     borderWidth: 1, borderColor: Colors.border,
   },
-  goalType: { color: Colors.primaryLight, fontSize: 16, fontWeight: '700', marginBottom: 10 },
+  seeProgressBtn: {
+    marginTop: 12, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: Colors.primary + '18',
+    alignItems: 'center', borderWidth: 1, borderColor: Colors.primary + '44',
+  },
+  seeProgressText: { color: Colors.primaryLight, fontSize: 13, fontWeight: '700' },
+  goalGroupLabel: { color: Colors.subtext, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  goalType: { color: Colors.primaryLight, fontSize: 15, fontWeight: '700' },
+  goalCardCurrent: { borderColor: Colors.primary + '66' },
+  goalCardCompleted: { opacity: 0.65 },
+  goalDateText: { color: Colors.muted, fontSize: 11 },
+  goalStatusBtn: {
+    backgroundColor: Colors.primary + '22', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: Colors.primary + '44',
+  },
+  goalStatusBtnText: { color: Colors.primaryLight, fontSize: 11, fontWeight: '700' },
+  goalStatusBtnCompleted: { backgroundColor: Colors.success + '22', borderColor: Colors.success + '44' },
+  goalStatusBtnTextCompleted: { color: Colors.success },
+  goalSection: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border },
+  goalSectionHeader: { color: Colors.subtext, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   goalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   goalLabel: { color: Colors.subtext, fontSize: 13 },
   goalValue: { color: Colors.text, fontSize: 13, fontWeight: '600', flex: 1, textAlign: 'right' },
+  goalEmpty: { color: Colors.muted, fontSize: 13, fontStyle: 'italic' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   rsvpList: { gap: 10 },
   rsvpItem: {
@@ -608,6 +712,21 @@ const styles = StyleSheet.create({
   },
   miniAvatarText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   moreText: { color: Colors.subtext, fontSize: 13, fontWeight: '600', marginLeft: 4 },
+  titleBadge: {
+    backgroundColor: Colors.primary + '22', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 4,
+    marginBottom: 6, borderWidth: 1, borderColor: Colors.primary + '44',
+  },
+  titleBadgeText: { color: Colors.primaryLight, fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+  rsvpConnRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  rsvpConnAvatar: {
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: Colors.primary + 'bb',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: Colors.card,
+  },
+  rsvpConnLetter: { color: Colors.white, fontSize: 9, fontWeight: '700' },
+  rsvpConnText: { color: Colors.subtext, fontSize: 11, fontWeight: '500', flex: 1 },
   logoutBtn: {
     marginTop: 32, borderWidth: 1, borderColor: Colors.border,
     borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12,

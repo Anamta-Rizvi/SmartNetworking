@@ -77,6 +77,11 @@ def get_recommendations(user_id: int, limit: int = 20, db: Session = Depends(get
 
     scored = []
     for event in events:
+        # For purely social goals, skip events that are career-only
+        if goal_type == "social":
+            event_categories = {et.tag.category for et in event.tags if et.tag}
+            if event_categories and event_categories.issubset({"career", "tech"}):
+                continue
         score, reason = _compute_score(event, user_tag_ids, goal_type)
         if score > 0:
             tags = [schemas.TagOut(id=et.tag.id, name=et.tag.name, category=et.tag.category)

@@ -8,7 +8,18 @@ export interface User {
   major: string | null;
   grad_year: number | null;
   university: string;
+  avatar_url?: string | null;
   created_at: string;
+  title?: string | null;  // "Student" | "Alumni" | "Senior" etc.
+}
+
+export interface RSVPWithConnections {
+  rsvp_id: number;
+  event_id: number;
+  event_title: string;
+  event_starts_at: string;
+  event_location: string;
+  connections_attending: { user_id: number; display_name: string; avatar_url?: string | null }[];
 }
 
 export interface RSVP {
@@ -53,3 +64,6 @@ export const createRSVP = (userId: number, eventId: number) =>
 
 export const deleteRSVP = (rsvpId: number) =>
   apiFetch(`/users/rsvp/${rsvpId}`, { method: 'DELETE' });
+
+export const getRsvpsWithConnections = (userId: number) =>
+  apiFetch<RSVPWithConnections[]>(`/users/${userId}/rsvps/connections`);

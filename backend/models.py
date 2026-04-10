@@ -70,7 +70,7 @@ class EventTag(Base):
 class Goal(Base):
     __tablename__ = "goals"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     primary_type = Column(String, default="both")  # career | social | both
     career_track = Column(String, nullable=True)
     social_intent = Column(String, nullable=True)
@@ -78,6 +78,7 @@ class Goal(Base):
     social_pref_note = Column(String, nullable=True)
     career_milestones = Column(Text, nullable=True)  # JSON: [{title, target_count, current_count}]
     social_milestones = Column(Text, nullable=True)   # JSON: [{title, target_count, current_count}]
+    status = Column(String, default="ongoing")  # ongoing | completed
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -215,6 +216,42 @@ class Referral(Base):
 
     user = relationship("User")
     event = relationship("Event")
+
+
+class Post(Base):
+    __tablename__ = "posts"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # nullable = anonymous
+    content = Column(Text, nullable=False)
+    tag = Column(String, nullable=False, default="Campus Life")
+    likes = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    replies = relationship("PostReply", back_populates="post", cascade="all, delete-orphan")
+    like_records = relationship("PostLike", back_populates="post", cascade="all, delete-orphan")
+
+
+class PostReply(Base):
+    __tablename__ = "post_replies"
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    post = relationship("Post", back_populates="replies")
+
+
+class PostLike(Base):
+    __tablename__ = "post_likes"
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_post_like"),)
+
+    post = relationship("Post", back_populates="like_records")
 
 
 class DirectMessage(Base):

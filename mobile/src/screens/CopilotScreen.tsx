@@ -258,6 +258,7 @@ const es = StyleSheet.create({
 
 export function CopilotScreen({ route, navigation }: any) {
   const userId = useStore(s => s.userId);
+  const qc = useQueryClient();
   const initialMode: CopilotMode = route?.params?.initialMode ?? 'goal_setup';
   const [mode, setMode] = useState<CopilotMode>(initialMode);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -367,8 +368,10 @@ export function CopilotScreen({ route, navigation }: any) {
         }),
       });
       setGoalComplete(goalData);
+      qc.invalidateQueries({ queryKey: ['goals', userId] });
+      qc.invalidateQueries({ queryKey: ['dashboard', userId] });
     } catch { /* non-fatal */ } finally { setSavingGoal(false); }
-  }, [userId, savingGoal]);
+  }, [userId, savingGoal, qc]);
 
   // Handle RSVP event selection for networking prep
   function handleEventSelect(eventId: number, eventTitle: string) {

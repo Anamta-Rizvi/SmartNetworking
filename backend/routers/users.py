@@ -1,11 +1,45 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
+from datetime import datetime
 import models
 import schemas
 from typing import List
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+def _compute_title(user: models.User) -> str:
+    """Derive a user title from grad_year."""
+    if not user.grad_year:
+        return "Student"
+    current_year = datetime.utcnow().year
+    if user.grad_year < current_year:
+        return "Alumni"
+    elif user.grad_year == current_year:
+        return "Graduating Senior"
+    elif user.grad_year == current_year + 1:
+        return "Senior"
+    elif user.grad_year == current_year + 2:
+        return "Junior"
+    elif user.grad_year == current_year + 3:
+        return "Sophomore"
+    else:
+        return "Freshman"
+
+
+def _user_out(user: models.User) -> schemas.UserOut:
+    return schemas.UserOut(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        major=user.major,
+        grad_year=user.grad_year,
+        university=user.university,
+        avatar_url=user.avatar_url,
+        created_at=user.created_at,
+        title=_compute_title(user),
+    )
 
 
 @router.post("/", response_model=schemas.UserOut)
@@ -17,7 +51,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    return db_user
+    return _user_out(db_user)
 
 
 @router.get("/login/{email}", response_model=schemas.UserOut)
@@ -25,7 +59,7 @@ def login_by_email(email: str, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == email.lower()).first()
     if not user:
         raise HTTPException(status_code=404, detail="No account found with that email")
-    return user
+    return _user_out(user)
 
 
 @router.get("/{user_id}", response_model=schemas.UserOut)
@@ -33,7 +67,45 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return user
+    return _user_out(user)
+
+
+@router.get("/{user_id}/rsvps/connections")
+def get_rsvps_with_connections(user_id: int, db: Session = Depends(get_db)):
+    """For each upcoming RSVP of the user, return which accepted connections also RSVPed."""
+    from routers.connections import _get_connection_ids
+    from datetime import timezone
+
+    connection_ids = _get_connection_ids(user_id, db)
+    user_rsvps = db.query(models.RSVP).filter(models.RSVP.user_id == user_id).all()
+
+    result = []
+    for rsvp in user_rsvps:
+        event = db.query(models.Event).filter(models.Event.id == rsvp.event_id).first()
+        if not event:
+            continue
+        # Find which connections also RSVPed
+        conn_rsvps = db.query(models.RSVP).filter(
+            models.RSVP.event_id == rsvp.event_id,
+            models.RSVP.user_id.in_(connection_ids),
+        ).all() if connection_ids else []
+
+        conn_users = []
+        for cr in conn_rsvps:
+            u = db.query(models.User).filter(models.User.id == cr.user_id).first()
+            if u:
+                conn_users.append({"user_id": u.id, "display_name": u.display_name, "avatar_url": u.avatar_url})
+
+        result.append({
+            "rsvp_id": rsvp.id,
+            "event_id": event.id,
+            "event_title": event.title,
+            "event_starts_at": event.starts_at.isoformat(),
+            "event_location": event.location,
+            "connections_attending": conn_users,
+        })
+
+    return result
 
 
 @router.post("/{user_id}/interests")

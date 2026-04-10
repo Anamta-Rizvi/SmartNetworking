@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 import math
 import models
 import schemas
@@ -25,7 +25,7 @@ def _fuzzy(lat: float, lng: float) -> tuple[float, float]:
     return round(lat, 3), round(lng, 3)
 
 
-@router.get("/events", response_model=list[schemas.EventOut])
+@router.get("/events", response_model=List[schemas.EventOut])
 def map_events(
     user_id: Optional[int] = Query(None, description="Requesting user — used to compute goal relevance"),
     sw_lat: Optional[float] = Query(None),
@@ -96,22 +96,62 @@ def map_events(
     return result
 
 
-@router.get("/users", response_model=list[schemas.FriendPresencePin])
+@router.get("/users", response_model=List[schemas.FriendPresencePin])
 def map_users(user_id: int = Query(...), db: Session = Depends(get_db)):
     """
-    Return RSVP-based friend presence pins.
-    Shows accepted connections who have RSVPed to upcoming events (with coordinates).
-    Friend pins are placed at the event location — no real GPS used.
+    Return people pins for the People tab.
+    Priority: real GPS location (UserLocation) — fallback to RSVP-based event location.
+    Always includes the requesting user themselves (if they have a location).
     """
     from routers.connections import _get_connection_ids
 
     friend_ids = _get_connection_ids(user_id, db)
+    result = []
+
+    # --- Own user pin first ---
+    self_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if self_user:
+        self_loc = db.query(models.UserLocation).filter(
+            models.UserLocation.user_id == user_id
+        ).first()
+        # Upcoming RSVP for context
+        self_rsvp = _nearest_rsvp(user_id, db)
+        if self_loc and _loc_valid(self_loc):
+            lat, lng = (round(self_loc.lat, 3), round(self_loc.lng, 3)) if self_loc.fuzzy else (self_loc.lat, self_loc.lng)
+            pin = schemas.FriendPresencePin(
+                user_id=self_user.id,
+                display_name="You",
+                avatar_url=self_user.avatar_url,
+                is_self=True,
+                lat=lat,
+                lng=lng,
+            )
+            if self_rsvp:
+                ev = self_rsvp.event
+                pin.event_id = ev.id
+                pin.event_title = ev.title
+                pin.event_location = ev.location
+                pin.event_lat = ev.lat
+                pin.event_lng = ev.lng
+                pin.event_starts_at = ev.starts_at
+            result.append(pin)
+
     if not friend_ids:
-        return []
+        return result
 
+    # --- Connection pins ---
+    # Load all connections' UserLocation records
+    loc_map: dict = {}
+    locs = db.query(models.UserLocation).filter(
+        models.UserLocation.user_id.in_(friend_ids)
+    ).all()
+    for loc in locs:
+        if _loc_valid(loc):
+            loc_map[loc.user_id] = loc
+
+    # Load upcoming RSVPs for all friends (event context)
     now = datetime.utcnow()
-    two_hours_ago = datetime.utcfromtimestamp(now.timestamp() - 7200)
-
+    two_hours_ago = now - timedelta(hours=2)
     rsvps = (
         db.query(models.RSVP)
         .join(models.Event, models.RSVP.event_id == models.Event.id)
@@ -119,27 +159,154 @@ def map_users(user_id: int = Query(...), db: Session = Depends(get_db)):
             models.RSVP.user_id.in_(friend_ids),
             models.Event.lat.isnot(None),
             models.Event.lng.isnot(None),
-            models.Event.starts_at >= two_hours_ago,  # include events up to 2h after start
+            models.Event.starts_at >= two_hours_ago,
         )
         .all()
     )
-
-    result = []
+    # Map friend_id → nearest rsvp
+    rsvp_map: dict = {}
     for rsvp in rsvps:
-        friend = db.query(models.User).filter(models.User.id == rsvp.user_id).first()
-        event = rsvp.event
-        if not friend or not event:
+        fid = rsvp.user_id
+        if fid not in rsvp_map:
+            rsvp_map[fid] = rsvp
+        else:
+            # Prefer the closest future event
+            existing_start = rsvp_map[fid].event.starts_at
+            new_start = rsvp.event.starts_at
+            if abs((new_start - now).total_seconds()) < abs((existing_start - now).total_seconds()):
+                rsvp_map[fid] = rsvp
+
+    # Build a pin for every friend who has either a GPS loc OR an RSVP
+    seen = set()
+    for fid in friend_ids:
+        if fid in seen:
             continue
-        result.append(schemas.FriendPresencePin(
+        seen.add(fid)
+        friend = db.query(models.User).filter(models.User.id == fid).first()
+        if not friend:
+            continue
+
+        loc = loc_map.get(fid)
+        rsvp = rsvp_map.get(fid)
+
+        # Need at least one of: GPS or RSVP
+        if not loc and not rsvp:
+            continue
+
+        pin = schemas.FriendPresencePin(
             user_id=friend.id,
             display_name=friend.display_name,
             avatar_url=friend.avatar_url,
+            is_self=False,
+        )
+
+        if loc:
+            # Use real GPS (respecting fuzzy)
+            lat = round(loc.lat, 3) if loc.fuzzy else loc.lat
+            lng = round(loc.lng, 3) if loc.fuzzy else loc.lng
+            pin.lat = lat
+            pin.lng = lng
+
+        if rsvp:
+            ev = rsvp.event
+            pin.event_id = ev.id
+            pin.event_title = ev.title
+            pin.event_location = ev.location
+            pin.event_lat = ev.lat
+            pin.event_lng = ev.lng
+            pin.event_starts_at = ev.starts_at
+
+        result.append(pin)
+
+    return result
+
+
+def _loc_valid(loc: models.UserLocation) -> bool:
+    """Check location is not expired and sharing is enabled."""
+    if loc.sharing_mode == "off":
+        return False
+    if loc.expires_at and loc.expires_at < datetime.utcnow():
+        return False
+    return True
+
+
+def _nearest_rsvp(user_id: int, db) -> Optional[models.RSVP]:
+    now = datetime.utcnow()
+    return (
+        db.query(models.RSVP)
+        .join(models.Event, models.RSVP.event_id == models.Event.id)
+        .filter(
+            models.RSVP.user_id == user_id,
+            models.Event.lat.isnot(None),
+            models.Event.lng.isnot(None),
+            models.Event.starts_at >= now - timedelta(hours=2),
+        )
+        .order_by(models.Event.starts_at)
+        .first()
+    )
+
+
+ATTEND_RADIUS_KM = 0.15  # 150 m — "at the event"
+
+
+@router.get("/heatmap", response_model=List[schemas.HeatmapPoint])
+def map_heatmap(db: Session = Depends(get_db)):
+    """
+    Return live-attendee heatmap points.
+    live_count = number of RSVPed users whose GPS is within 150m of the event
+                 AND the current time is between event start and end.
+    rsvp_count = total RSVPs (reference only).
+    """
+    now = datetime.utcnow()
+
+    # Events currently in progress (started but not ended / no end time → 3h window)
+    active_events = (
+        db.query(models.Event)
+        .filter(
+            models.Event.status == "published",
+            models.Event.lat.isnot(None),
+            models.Event.lng.isnot(None),
+            models.Event.starts_at <= now,
+        )
+        .all()
+    )
+    active_events = [
+        e for e in active_events
+        if (e.ends_at or e.starts_at + timedelta(hours=3)) >= now
+    ]
+
+    # Load all active GPS locations
+    all_locs = db.query(models.UserLocation).filter(
+        models.UserLocation.sharing_mode != "off"
+    ).all()
+    valid_locs = [loc for loc in all_locs if _loc_valid(loc)]
+
+    # Map user_id → location
+    loc_by_user = {loc.user_id: loc for loc in valid_locs}
+
+    result = []
+    for event in active_events:
+        # Get RSVPed user IDs
+        rsvp_user_ids = {
+            r.user_id for r in
+            db.query(models.RSVP).filter(models.RSVP.event_id == event.id).all()
+        }
+        # Count how many are physically near
+        live_count = 0
+        for uid in rsvp_user_ids:
+            loc = loc_by_user.get(uid)
+            if loc:
+                dist = _haversine_km(loc.lat, loc.lng, event.lat, event.lng)
+                if dist <= ATTEND_RADIUS_KM:
+                    live_count += 1
+
+        result.append(schemas.HeatmapPoint(
             event_id=event.id,
             event_title=event.title,
-            event_location=event.location,
-            event_lat=event.lat,
-            event_lng=event.lng,
-            event_starts_at=event.starts_at,
+            lat=event.lat,
+            lng=event.lng,
+            live_count=live_count,
+            rsvp_count=event.rsvp_count,
         ))
 
     return result

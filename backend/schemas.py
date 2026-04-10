@@ -65,6 +65,7 @@ class UserOut(BaseModel):
     university: str
     avatar_url: Optional[str] = None
     created_at: datetime
+    title: Optional[str] = None  # "Student" | "Alumni" | "Graduate Student" etc.
 
     class Config:
         from_attributes = True
@@ -89,9 +90,15 @@ class GoalOut(BaseModel):
     social_intent: Optional[str]
     interests: Optional[str]
     social_pref_note: Optional[str]
+    status: str = "ongoing"
+    created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class GoalStatusUpdate(BaseModel):
+    status: str  # "ongoing" | "completed"
 
 
 # --- User Interests ---
@@ -251,12 +258,26 @@ class FriendPresencePin(BaseModel):
     user_id: int
     display_name: str
     avatar_url: Optional[str] = None
+    is_self: bool = False
+    # GPS location (real, from UserLocation table — may be fuzzy)
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    # RSVP-based event context
+    event_id: Optional[int] = None
+    event_title: Optional[str] = None
+    event_location: Optional[str] = None
+    event_lat: Optional[float] = None
+    event_lng: Optional[float] = None
+    event_starts_at: Optional[datetime] = None
+
+
+class HeatmapPoint(BaseModel):
     event_id: int
     event_title: str
-    event_location: str
-    event_lat: float
-    event_lng: float
-    event_starts_at: datetime
+    lat: float
+    lng: float
+    live_count: int       # people whose GPS is near the event right now
+    rsvp_count: int       # total RSVPs for reference
 
 
 # --- Copilot ---
@@ -369,3 +390,37 @@ class BulkAIMessageRequest(BaseModel):
     sender_id: int
     receiver_ids: List[int]
     event_id: Optional[int] = None   # event that prompted the referral ask
+
+
+# --- Feed / Posts ---
+class PostReplyOut(BaseModel):
+    id: int
+    content: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PostOut(BaseModel):
+    id: int
+    content: str
+    tag: str
+    likes: int
+    liked: bool = False   # populated in the router per requesting user
+    created_at: datetime
+    replies: List[PostReplyOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class PostCreate(BaseModel):
+    content: str
+    tag: str
+    user_id: Optional[int] = None   # None = anonymous
+
+
+class PostReplyCreate(BaseModel):
+    content: str
+    user_id: Optional[int] = None

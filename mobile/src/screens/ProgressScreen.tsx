@@ -15,8 +15,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Colors } from '../constants/colors';
 import { useStore } from '../store/useStore';
-import { fetchDashboard, markAttendance, GoalEvent } from '../api/dashboard';
+import { fetchDashboard, fetchGoalDashboard, markAttendance, GoalEvent } from '../api/dashboard';
 import { getReferrals, logReferral, updateReferral, deleteReferral, Referral } from '../api/referrals';
+
+const GOAL_TYPE_LABEL: Record<string, string> = {
+  career: 'Career',
+  social: 'Social',
+  both: 'Career + Social',
+};
 
 // ─── Mini bar chart ──────────────────────────────────────────────────────────
 function BarChart({ data }: { data: { label: string; rsvp: number; attended: number }[] }) {
@@ -157,9 +163,11 @@ const modal = StyleSheet.create({
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
-export default function ProgressScreen() {
+export default function ProgressScreen({ route }: any) {
   const { userId } = useStore();
   const qc = useQueryClient();
+  const goalId: number | undefined = route?.params?.goalId;
+  const primaryType: string | undefined = route?.params?.primaryType;
   const [showReferralModal, setShowReferralModal] = useState(false);
   const [editingReferral, setEditingReferral] = useState<Referral | undefined>();
 
@@ -167,7 +175,11 @@ export default function ProgressScreen() {
     data: dashboard,
     isLoading: dashLoading,
     refetch: refetchDash,
-  } = useQuery({ queryKey: ['dashboard', userId], queryFn: () => fetchDashboard(userId!) });
+  } = useQuery({
+    queryKey: goalId ? ['dashboard', userId, goalId] : ['dashboard', userId],
+    queryFn: () => goalId ? fetchGoalDashboard(userId!, goalId) : fetchDashboard(userId!),
+    enabled: !!userId,
+  });
 
   const {
     data: referrals = [],
@@ -264,7 +276,9 @@ export default function ProgressScreen() {
           />
         }
       >
-        <Text style={s.heading}>Progress</Text>
+        <Text style={s.heading}>
+          {primaryType ? `${GOAL_TYPE_LABEL[primaryType] ?? primaryType} Progress` : 'Progress'}
+        </Text>
 
         {/* Overview cards */}
         <View style={s.cardRow}>
@@ -358,8 +372,8 @@ export default function ProgressScreen() {
           </View>
         )}
 
-        {/* Referral log */}
-        <View style={s.section}>
+        {/* Referral log — only for career goals */}
+        {primaryType !== 'social' && <View style={s.section}>
           <View style={s.sectionHeader}>
             <Text style={s.sectionTitle}>Referrals</Text>
             <TouchableOpacity
@@ -406,7 +420,7 @@ export default function ProgressScreen() {
               </View>
             ))
           )}
-        </View>
+        </View>}
       </ScrollView>
 
       <ReferralModal

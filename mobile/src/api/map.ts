@@ -13,13 +13,30 @@ export interface MapEvent {
   goal_relevance_label?: string | null;
 }
 
-export interface MapUser {
+export interface PeoplePin {
   user_id: number;
   display_name: string;
-  sharing_mode: string;
+  avatar_url?: string | null;
+  is_self: boolean;
+  // Real GPS location
+  lat?: number | null;
+  lng?: number | null;
+  // RSVP event context
+  event_id?: number | null;
+  event_title?: string | null;
+  event_location?: string | null;
+  event_lat?: number | null;
+  event_lng?: number | null;
+  event_starts_at?: string | null;
+}
+
+export interface HeatmapPoint {
+  event_id: number;
+  event_title: string;
   lat: number;
   lng: number;
-  updated_at: string;
+  live_count: number;
+  rsvp_count: number;
 }
 
 export async function fetchMapEvents(
@@ -38,8 +55,12 @@ export async function fetchMapEvents(
   return apiFetch<MapEvent[]>(`/map/events${query}`);
 }
 
-export async function fetchMapUsers(): Promise<MapUser[]> {
-  return apiFetch<MapUser[]>('/map/users');
+export async function fetchPeoplePins(userId: number): Promise<PeoplePin[]> {
+  return apiFetch<PeoplePin[]>(`/map/users?user_id=${userId}`);
+}
+
+export async function fetchHeatmap(): Promise<HeatmapPoint[]> {
+  return apiFetch<HeatmapPoint[]>('/map/heatmap');
 }
 
 export async function updateLocation(

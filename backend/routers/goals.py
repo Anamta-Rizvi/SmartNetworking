@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 import models
 import schemas
 import json
@@ -39,36 +39,12 @@ def _generate_milestones(primary_type: str, career_track: Optional[str], timelin
 
 
 @router.post("/", response_model=schemas.GoalOut)
-def upsert_goal(payload: schemas.GoalCreate, db: Session = Depends(get_db)):
+def create_goal(payload: schemas.GoalCreate, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == payload.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    existing = db.query(models.Goal).filter(models.Goal.user_id == payload.user_id).first()
     interests_json = json.dumps(payload.interests or [])
-
-    if existing:
-        existing.primary_type = payload.primary_type
-        existing.career_track = payload.career_track
-        existing.social_intent = payload.social_intent
-        existing.interests = interests_json
-        existing.social_pref_note = payload.social_pref_note
-        existing.updated_at = datetime.utcnow()
-        # Regenerate milestones if goal type changed or milestones don't exist
-        if not existing.career_milestones and not existing.social_milestones:
-            c_m, s_m = _generate_milestones(payload.primary_type, payload.career_track, payload.timeline)
-            existing.career_milestones = json.dumps(c_m)
-            existing.social_milestones = json.dumps(s_m)
-        elif payload.timeline:
-            # If a new timeline was provided, regenerate milestones
-            c_m, s_m = _generate_milestones(payload.primary_type, payload.career_track, payload.timeline)
-            existing.career_milestones = json.dumps(c_m)
-            existing.social_milestones = json.dumps(s_m)
-        db.commit()
-        db.refresh(existing)
-        return existing
-
-    # Auto-generate milestones for new goal
     career_milestones, social_milestones = _generate_milestones(
         payload.primary_type, payload.career_track, payload.timeline
     )
@@ -89,11 +65,27 @@ def upsert_goal(payload: schemas.GoalCreate, db: Session = Depends(get_db)):
     return goal
 
 
-@router.get("/{user_id}", response_model=schemas.GoalOut)
-def get_goal(user_id: int, db: Session = Depends(get_db)):
-    goal = db.query(models.Goal).filter(models.Goal.user_id == user_id).first()
+@router.get("/{user_id}", response_model=List[schemas.GoalOut])
+def get_goals(user_id: int, db: Session = Depends(get_db)):
+    return (
+        db.query(models.Goal)
+        .filter(models.Goal.user_id == user_id)
+        .order_by(models.Goal.created_at.desc())
+        .all()
+    )
+
+
+@router.patch("/{goal_id}/status", response_model=schemas.GoalOut)
+def update_goal_status(goal_id: int, payload: schemas.GoalStatusUpdate, db: Session = Depends(get_db)):
+    goal = db.query(models.Goal).filter(models.Goal.id == goal_id).first()
     if not goal:
-        raise HTTPException(status_code=404, detail="No goal set for this user")
+        raise HTTPException(status_code=404, detail="Goal not found")
+    if payload.status not in ("ongoing", "completed"):
+        raise HTTPException(status_code=400, detail="status must be 'ongoing' or 'completed'")
+    goal.status = payload.status
+    goal.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(goal)
     return goal
 
 
@@ -108,8 +100,19 @@ def _compute_progress(milestones: list) -> float:
 
 
 @router.get("/{user_id}/dashboard", response_model=schemas.GoalDashboard)
-def get_dashboard(user_id: int, db: Session = Depends(get_db)):
-    goal = db.query(models.Goal).filter(models.Goal.user_id == user_id).first()
+def get_dashboard(user_id: int, goal_id: Optional[int] = None, db: Session = Depends(get_db)):
+    if goal_id:
+        goal = db.query(models.Goal).filter(
+            models.Goal.id == goal_id,
+            models.Goal.user_id == user_id,
+        ).first()
+    else:
+        goal = (
+            db.query(models.Goal)
+            .filter(models.Goal.user_id == user_id)
+            .order_by(models.Goal.created_at.desc())
+            .first()
+        )
     if not goal:
         raise HTTPException(status_code=404, detail="No goal set for this user")
 
@@ -139,7 +142,12 @@ def get_dashboard(user_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{user_id}/events", response_model=schemas.GoalEventOut)
 def add_goal_event(user_id: int, payload: schemas.GoalEventCreate, db: Session = Depends(get_db)):
-    goal = db.query(models.Goal).filter(models.Goal.user_id == user_id).first()
+    goal = (
+        db.query(models.Goal)
+        .filter(models.Goal.user_id == user_id)
+        .order_by(models.Goal.created_at.desc())
+        .first()
+    )
     if not goal:
         raise HTTPException(status_code=404, detail="No goal set for this user")
     event = db.query(models.Event).filter(models.Event.id == payload.event_id).first()

@@ -14,7 +14,8 @@
       "Bash(ls /Users/anamtarizvi/SmartNetworking/backend/*.env*)",
       "Bash(curl -s -N -X POST http://localhost:8000/copilot/chat -H 'Content-Type: application/json' -d '{\"user_id\":1,\"mode\":\"goal_setup\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"context\":{}}' --max-time 10)",
       "Bash(python:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(sqlite3:*)"
     ]
   }
 }
