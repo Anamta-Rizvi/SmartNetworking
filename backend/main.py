@@ -8,7 +8,7 @@ load_dotenv()
 
 from database import engine
 import models
-from routers import events, users, goals, recommendations, copilot, map, notifications, connections, uploads
+from routers import events, users, goals, recommendations, copilot, map, notifications, connections, uploads, schedule, companies, referrals, chat
 from seed import seed
 
 models.Base.metadata.create_all(bind=engine)
@@ -33,6 +33,10 @@ app.include_router(map.router)
 app.include_router(notifications.router)
 app.include_router(connections.router)
 app.include_router(uploads.router)
+app.include_router(schedule.router)
+app.include_router(companies.router)
+app.include_router(referrals.router)
+app.include_router(chat.router)
 
 _uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(_uploads_dir, exist_ok=True)

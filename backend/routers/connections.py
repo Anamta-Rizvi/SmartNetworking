@@ -180,6 +180,31 @@ def respond_to_request(
     return conn
 
 
+@router.get("/{user_id}/recently-accepted", response_model=list[dict])
+def recently_accepted(user_id: int, minutes: int = Query(default=2), db: Session = Depends(get_db)):
+    """Return connections accepted within the last N minutes — used for in-app notifications."""
+    from datetime import timedelta
+    cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+    conns = db.query(models.Connection).filter(
+        (models.Connection.requester_id == user_id) |
+        (models.Connection.addressee_id == user_id),
+        models.Connection.status == "accepted",
+        models.Connection.updated_at >= cutoff,
+    ).all()
+    result = []
+    for c in conns:
+        peer_id = c.addressee_id if c.requester_id == user_id else c.requester_id
+        peer = db.query(models.User).filter(models.User.id == peer_id).first()
+        if peer:
+            result.append({
+                "connection_id": c.id,
+                "peer_id": peer.id,
+                "peer_name": peer.display_name,
+                "accepted_at": c.updated_at.isoformat(),
+            })
+    return result
+
+
 @router.get("/{user_id}", response_model=list[dict])
 def list_connections(user_id: int, db: Session = Depends(get_db)):
     friend_ids = _get_connection_ids(user_id, db)

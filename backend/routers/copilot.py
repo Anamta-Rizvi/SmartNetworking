@@ -64,45 +64,52 @@ After the user answers Step 5, respond with a warm personalized summary of their
 
 Replace the values with what the user actually told you. Use null for unused fields.""",
 
-    "networking": """You are a campus networking coach helping a student prepare to connect with someone at an event.
-Given context about who they're meeting (name, role, company, shared event), generate:
-- 2-3 personalized conversation starters
-- A clear, 30-second elevator pitch tailored to the student's background and goals
-- One thoughtful question to ask the other person
+    "networking": """You are a campus networking coach helping a student prepare for a specific event they RSVPed to.
 
-Be specific, professional but warm. Avoid generic advice.""",
+You will receive context about:
+- The event (name, date, time, organizer, description)
+- Other RSVPed attendees (professionals and students, with their company/major/interests)
+- The student's goal and target companies
 
-    "elevator_pitch": """You are a career coach helping a student craft a sharp, authentic elevator pitch.
-Generate a 30-second pitch (about 75 words) that is:
-- Professional and confident, not stiff
-- Specific about their skills, experience, and what they're looking for
-- Ending with a clear ask or transition
+Your job is to generate a focused EVENT PREP BRIEF:
 
-Tailor it to the context they provide (role, company, event type).""",
+## Who to Meet — Professionals
+List 2-3 professionals attending. For each:
+- Name, Company, Role
+- Why they're relevant to the student's goal
+- One conversation angle specific to their background
 
-    "icebreaker": """You are a social coach helping a student start low-pressure conversations at campus social or hobby events.
-Generate 3 casual, genuine icebreakers that:
-- Are specific to the event type or shared interest
-- Feel natural, not scripted
-- Invite a real conversation rather than a yes/no answer
+## Who to Meet — Students
+List 2-3 students attending. For each:
+- Name, Major, Year
+- Shared interests or RSVPs
+- What to talk about
 
-Keep it light, friendly, and fun.""",
+## Conversation Angles
+2-3 specific topics to bring up at this event, tied to the student's goal.
 
-    "followup": """You are an assistant helping a student write a follow-up message after meeting someone at a campus event.
-Write a short, warm follow-up (3-5 sentences) that:
-- References something specific from the conversation
-- Reiterates genuine interest in staying connected
-- Includes a clear next step (coffee chat, LinkedIn, collaboration)
+## Goal Fit
+One sentence on how attending this event moves their metrics (referrals, connections, etc.).
 
-Avoid generic phrases like 'It was great meeting you.' Be specific.""",
+Be specific and actionable. No generic advice. No elevator pitch templates.""",
 
-    "daily_planner": """You are a campus life planner helping a student make the most of their day.
-Given their goals and upcoming events, generate a short prioritized daily plan:
-- Top 1-2 events they should attend and why
-- One networking or social action to take
-- One small habit or task that moves them toward their goal
+    "daily_planner": """You are a campus life planner helping a student build their plan for today.
 
-Be direct and specific. No fluff.""",
+You will receive:
+- Today's events (title, time, location, goal relevance score)
+- The student's class schedule for today (class name, start time, end time)
+- The student's active goals and milestones
+
+Your job:
+1. For each event today, determine if it conflicts with a class or fits in a free slot.
+2. Output a prioritized list of events with:
+   - FREE or CONFLICT status (and which class if conflict)
+   - Why the event matters for their goal
+   - Your recommendation: Accept or Review
+3. End with one networking action and one habit/task.
+
+Format your response as a structured daily plan. Be direct and time-aware.
+Mention actual times (e.g. "2:00 PM — Tech Networking Mixer — FREE — 78% goal match").""",
 
     "progress_review": """You are a goal progress coach reviewing a student's Campus OS goal dashboard.
 You have access to their milestones, the events Copilot recommended, and which ones they attended.
@@ -118,7 +125,7 @@ When you identify a specific upcoming event that would help, include it in your 
 }
 
 
-def _build_context(user_id: int, db: Session) -> str:
+def _build_context(user_id: int, mode: str, db: Session, extra_context: dict = None) -> str:
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         return ""
@@ -139,17 +146,99 @@ def _build_context(user_id: int, db: Session) -> str:
             except Exception:
                 pass
 
-    upcoming_rsvps = (
-        db.query(models.RSVP)
-        .join(models.Event)
-        .filter(models.RSVP.user_id == user_id)
-        .filter(models.Event.starts_at >= datetime.utcnow())
-        .filter(models.Event.starts_at <= datetime.utcnow() + timedelta(days=7))
-        .all()
-    )
-    if upcoming_rsvps:
-        rsvp_titles = [r.event.title for r in upcoming_rsvps if r.event]
-        parts.append(f"Upcoming RSVPs: {', '.join(rsvp_titles[:3])}.")
+    # Company preferences
+    company_prefs = db.query(models.CompanyPreference).filter(
+        models.CompanyPreference.user_id == user_id
+    ).all()
+    if company_prefs:
+        prefs_str = ", ".join(
+            f"{p.company_name} ({p.job_role})" if p.job_role else p.company_name
+            for p in company_prefs
+        )
+        parts.append(f"Target companies: {prefs_str}.")
+
+    if mode == "daily_planner":
+        # Add today's events
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today_start + timedelta(days=1)
+        today_events = (
+            db.query(models.Event)
+            .filter(models.Event.starts_at >= today_start, models.Event.starts_at < today_end)
+            .filter(models.Event.status == "published")
+            .all()
+        )
+        if today_events:
+            event_strs = []
+            for e in today_events:
+                time_str = e.starts_at.strftime("%I:%M %p")
+                event_strs.append(f'"{e.title}" at {time_str}, {e.location}')
+            parts.append(f"Today's events: {'; '.join(event_strs)}.")
+
+        # Add class schedule for today
+        today_dow = datetime.utcnow().weekday()  # 0=Monday
+        classes_today = db.query(models.ClassSchedule).filter(
+            models.ClassSchedule.user_id == user_id,
+            models.ClassSchedule.day_of_week == today_dow,
+        ).all()
+        if classes_today:
+            class_strs = [f"{c.class_name} ({c.start_time}–{c.end_time})" for c in classes_today]
+            parts.append(f"Classes today: {', '.join(class_strs)}.")
+        else:
+            parts.append("No classes today.")
+
+    elif mode == "networking":
+        # Add upcoming RSVPed events so AI can list them
+        upcoming_rsvps = (
+            db.query(models.RSVP)
+            .join(models.Event)
+            .filter(models.RSVP.user_id == user_id)
+            .filter(models.Event.starts_at >= datetime.utcnow())
+            .filter(models.Event.starts_at <= datetime.utcnow() + timedelta(days=14))
+            .all()
+        )
+        if upcoming_rsvps:
+            rsvp_strs = []
+            for r in upcoming_rsvps[:5]:
+                if r.event:
+                    time_str = r.event.starts_at.strftime("%b %d, %I:%M %p")
+                    rsvp_strs.append(f'"{r.event.title}" on {time_str}')
+            parts.append(f"Upcoming RSVPs: {'; '.join(rsvp_strs)}.")
+
+        # If specific event_id provided in extra_context, add attendee details
+        if extra_context and extra_context.get("event_id"):
+            event_id = extra_context["event_id"]
+            event = db.query(models.Event).filter(models.Event.id == event_id).first()
+            if event:
+                parts.append(f"\nPreparing for event: {event.title} on {event.starts_at.strftime('%b %d, %I:%M %p')} at {event.location}.")
+                if event.description:
+                    parts.append(f"Event description: {event.description[:300]}.")
+                # Get other attendees
+                attendee_rsvps = db.query(models.RSVP).filter(
+                    models.RSVP.event_id == event_id,
+                    models.RSVP.user_id != user_id,
+                ).limit(10).all()
+                if attendee_rsvps:
+                    attendee_strs = []
+                    for ar in attendee_rsvps:
+                        att = ar.user
+                        if att:
+                            attendee_strs.append(
+                                f"{att.display_name} ({att.major or 'unknown major'}, Class of {att.grad_year or 'N/A'})"
+                            )
+                    parts.append(f"Other attendees: {'; '.join(attendee_strs)}.")
+    else:
+        # General: add upcoming RSVPs
+        upcoming_rsvps = (
+            db.query(models.RSVP)
+            .join(models.Event)
+            .filter(models.RSVP.user_id == user_id)
+            .filter(models.Event.starts_at >= datetime.utcnow())
+            .filter(models.Event.starts_at <= datetime.utcnow() + timedelta(days=7))
+            .all()
+        )
+        if upcoming_rsvps:
+            rsvp_titles = [r.event.title for r in upcoming_rsvps if r.event]
+            parts.append(f"Upcoming RSVPs: {', '.join(rsvp_titles[:3])}.")
 
     return " ".join(parts)
 
@@ -229,7 +318,7 @@ async def copilot_chat(payload: schemas.CopilotChatRequest, db: Session = Depend
     mode = payload.mode if payload.mode in SYSTEM_PROMPTS else "goal_setup"
     system_prompt = SYSTEM_PROMPTS[mode]
 
-    user_context = _build_context(payload.user_id, db)
+    user_context = _build_context(payload.user_id, mode, db, payload.context)
     if user_context:
         system_prompt += f"\n\nUser context: {user_context}"
 

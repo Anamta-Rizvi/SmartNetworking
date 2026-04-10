@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
   TouchableOpacity, ActivityIndicator, Alert, RefreshControl, Image,
@@ -11,6 +11,7 @@ import { API_BASE } from '../api/client';
 import {
   searchUsers, sendConnectionRequest, respondToRequest,
   getConnections, getPendingRequests, removeConnection, getSuggestions,
+  getRecentlyAccepted,
   ConnectionUser, ConnectionOut, UserOut, SuggestedUser,
 } from '../api/connections';
 
@@ -95,6 +96,44 @@ export default function ConnectionsScreen({ navigation }: any) {
     queryFn: () => getSuggestions(userId!),
     enabled: !!userId,
   });
+
+  // Poll for newly accepted requests and notify
+  const notifiedIdsRef = useRef<Set<number>>(new Set());
+  const isFirstPollRef = useRef(true);
+  const { data: recentlyAccepted = [] } = useQuery({
+    queryKey: ['recently-accepted', userId],
+    queryFn: () => getRecentlyAccepted(userId!),
+    enabled: !!userId,
+    refetchInterval: 30_000,
+  });
+  useEffect(() => {
+    if (recentlyAccepted.length === 0) return;
+    if (isFirstPollRef.current) {
+      recentlyAccepted.forEach(c => notifiedIdsRef.current.add(c.connection_id));
+      isFirstPollRef.current = false;
+      return;
+    }
+    recentlyAccepted.forEach(c => {
+      if (!notifiedIdsRef.current.has(c.connection_id)) {
+        notifiedIdsRef.current.add(c.connection_id);
+        queryClient.invalidateQueries({ queryKey: ['connections', userId] });
+        Alert.alert(
+          'Connection Accepted! 🎉',
+          `${c.peer_name} accepted your connection request.`,
+          [
+            {
+              text: 'Message',
+              onPress: () => navigation.navigate('Conversation', {
+                peerId: c.peer_id,
+                peerName: c.peer_name,
+              }),
+            },
+            { text: 'OK' },
+          ],
+        );
+      }
+    });
+  }, [recentlyAccepted]);
 
   const sendMutation = useMutation({
     mutationFn: (addresseeId: number) => sendConnectionRequest(userId!, addresseeId),
@@ -314,16 +353,29 @@ export default function ConnectionsScreen({ navigation }: any) {
                         </View>
                       )}
                     </View>
-                    <TouchableOpacity
-                      onPress={() =>
-                        Alert.alert('Remove Connection', `Remove ${user.display_name}?`, [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Remove', style: 'destructive', onPress: () => removeMutation.mutate(user.id) },
-                        ])
-                      }
-                    >
-                      <Text style={styles.removeText}>Remove</Text>
-                    </TouchableOpacity>
+                    <View style={{ gap: 6 }}>
+                      <TouchableOpacity
+                        style={styles.messageBtn}
+                        onPress={() =>
+                          navigation.navigate('Conversation', {
+                            peerId: user.id,
+                            peerName: user.display_name,
+                          })
+                        }
+                      >
+                        <Text style={styles.messageBtnText}>Message</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() =>
+                          Alert.alert('Remove Connection', `Remove ${user.display_name}?`, [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Remove', style: 'destructive', onPress: () => removeMutation.mutate(user.id) },
+                          ])
+                        }
+                      >
+                        <Text style={styles.removeText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ))
               }
@@ -372,7 +424,9 @@ const styles = StyleSheet.create({
   },
   userName: { color: Colors.text, fontSize: 14, fontWeight: '700' },
   userMeta: { color: Colors.subtext, fontSize: 12, marginTop: 2 },
-  removeText: { color: Colors.muted, fontSize: 12, fontWeight: '600' },
+  removeText: { color: Colors.muted, fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  messageBtn: { backgroundColor: Colors.primary + '22', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: Colors.primary + '55' },
+  messageBtnText: { color: Colors.primaryLight, fontSize: 12, fontWeight: '700' },
   emptyText: { color: Colors.muted, fontSize: 13, fontStyle: 'italic' },
   sectionHint: { color: Colors.muted, fontSize: 11, marginBottom: 10, fontStyle: 'italic' },
   weightRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },

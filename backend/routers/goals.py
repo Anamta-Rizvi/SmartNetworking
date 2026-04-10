@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from datetime import datetime
+from typing import Optional, Tuple
 import models
 import schemas
 import json
@@ -9,7 +10,7 @@ import json
 router = APIRouter(prefix="/goals", tags=["Goals"])
 
 
-def _generate_milestones(primary_type: str, career_track: str | None, timeline: str | None) -> tuple[list, list]:
+def _generate_milestones(primary_type: str, career_track: Optional[str], timeline: Optional[str]) -> Tuple[list, list]:
     """Auto-generate default milestones based on goal type and timeline."""
     multiplier = 1.0
     if timeline == "This semester":

@@ -343,12 +343,20 @@ export default function GoalDashboardScreen({ navigation }: any) {
         />
       )}
 
-      <TouchableOpacity
-        style={styles.copilotBtn}
-        onPress={() => navigation.navigate('Copilot', { initialMode: 'progress_review' })}
-      >
-        <Text style={styles.copilotBtnText}>Ask Copilot to review my progress</Text>
-      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', gap: 12, marginBottom: 8 }}>
+        <TouchableOpacity
+          style={[styles.copilotBtn, { flex: 1 }]}
+          onPress={() => navigation.navigate('Copilot', { initialMode: 'progress_review' })}
+        >
+          <Text style={styles.copilotBtnText}>Ask Copilot to review</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.copilotBtn, { flex: 1, backgroundColor: 'transparent', borderWidth: 1, borderColor: Colors.primary }]}
+          onPress={() => navigation.navigate('Progress')}
+        >
+          <Text style={[styles.copilotBtnText, { color: Colors.primaryLight }]}>Progress & Referrals</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
     </SafeAreaView>
   );

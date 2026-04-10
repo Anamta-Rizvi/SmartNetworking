@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, field_validator
+from typing import Optional, List, Any
 from datetime import datetime
 
 
@@ -30,6 +30,18 @@ class EventOut(BaseModel):
     tags: List[TagOut] = []
     goal_relevance_score: Optional[float] = None
     goal_relevance_label: Optional[str] = None
+
+    @field_validator('tags', mode='before')
+    @classmethod
+    def resolve_event_tags(cls, v: Any) -> Any:
+        """EventTag join-table rows expose a .tag attribute; unwrap them."""
+        result = []
+        for item in v:
+            if hasattr(item, 'tag') and item.tag is not None:
+                result.append(item.tag)
+            else:
+                result.append(item)
+        return result
 
     class Config:
         from_attributes = True
@@ -255,6 +267,105 @@ class Message(BaseModel):
 
 class CopilotChatRequest(BaseModel):
     user_id: int
-    mode: str  # goal_setup | networking | elevator_pitch | icebreaker | followup | daily_planner
+    mode: str  # goal_setup | networking | daily_planner | progress_review
     messages: List[Message]
     context: Optional[dict] = {}
+
+
+# --- ClassSchedule ---
+class ClassScheduleCreate(BaseModel):
+    user_id: int
+    class_name: str
+    day_of_week: int   # 0=Monday … 6=Sunday
+    start_time: str    # "HH:MM"
+    end_time: str      # "HH:MM"
+
+
+class ClassScheduleOut(BaseModel):
+    id: int
+    user_id: int
+    class_name: str
+    day_of_week: int
+    start_time: str
+    end_time: str
+
+    class Config:
+        from_attributes = True
+
+
+# --- CompanyPreference ---
+class CompanyPreferenceCreate(BaseModel):
+    user_id: int
+    company_name: str
+    job_role: Optional[str] = None
+
+
+class CompanyPreferenceOut(BaseModel):
+    id: int
+    user_id: int
+    company_name: str
+    job_role: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+# --- Referral ---
+class ReferralCreate(BaseModel):
+    user_id: int
+    company_name: str
+    contact_name: Optional[str] = None
+    notes: Optional[str] = None
+    event_id: Optional[int] = None
+
+
+class ReferralUpdate(BaseModel):
+    company_name: Optional[str] = None
+    contact_name: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ReferralOut(BaseModel):
+    id: int
+    user_id: int
+    company_name: str
+    contact_name: Optional[str]
+    notes: Optional[str]
+    event_id: Optional[int]
+    received_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- DirectMessage ---
+class DirectMessageCreate(BaseModel):
+    sender_id: int
+    receiver_id: int
+    content: str
+    is_ai_generated: bool = False
+
+
+class DirectMessageOut(BaseModel):
+    id: int
+    sender_id: int
+    receiver_id: int
+    content: str
+    is_ai_generated: bool
+    read_at: Optional[datetime]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ConversationOut(BaseModel):
+    peer: UserOut
+    last_message: Optional[DirectMessageOut]
+    unread_count: int
+
+
+class BulkAIMessageRequest(BaseModel):
+    sender_id: int
+    receiver_ids: List[int]
+    event_id: Optional[int] = None   # event that prompted the referral ask

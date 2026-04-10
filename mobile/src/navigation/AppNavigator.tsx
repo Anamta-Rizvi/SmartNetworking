@@ -18,6 +18,10 @@ import { ProfileScreen } from '../screens/ProfileScreen';
 import MapScreen from '../screens/MapScreen';
 import GoalDashboardScreen from '../screens/GoalDashboardScreen';
 import ConnectionsScreen from '../screens/ConnectionsScreen';
+import ProgressScreen from '../screens/ProgressScreen';
+import ChatScreen from '../screens/ChatScreen';
+import ConversationScreen from '../screens/ConversationScreen';
+import FeedScreen from '../screens/FeedScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -71,6 +75,22 @@ function MainTabs() {
         options={{
           tabBarLabel: 'Copilot',
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>🤖</Text>,
+        }}
+      />
+      <Tab.Screen
+        name="Feed"
+        component={FeedScreen}
+        options={{
+          tabBarLabel: 'Feed',
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>📢</Text>,
+        }}
+      />
+      <Tab.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{
+          tabBarLabel: 'Chat',
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>💬</Text>,
         }}
       />
       <Tab.Screen
@@ -128,6 +148,30 @@ export function AppNavigator() {
               name="Connections"
               component={ConnectionsScreen}
               options={{ presentation: 'card' }}
+            />
+            <Stack.Screen
+              name="Conversation"
+              component={ConversationScreen}
+              options={({ route }: any) => ({
+                presentation: 'card',
+                headerShown: true,
+                title: route.params?.peerName ?? 'Chat',
+                headerStyle: { backgroundColor: Colors.card },
+                headerTintColor: Colors.text,
+                headerTitleStyle: { fontWeight: '700' },
+              })}
+            />
+            <Stack.Screen
+              name="Progress"
+              component={ProgressScreen}
+              options={{
+                presentation: 'card',
+                headerShown: true,
+                title: 'Progress',
+                headerStyle: { backgroundColor: Colors.card },
+                headerTintColor: Colors.text,
+                headerTitleStyle: { fontWeight: '700' },
+              }}
             />
           </>
         )}

@@ -177,3 +177,55 @@ class CopilotSession(Base):
     messages = Column(Text, nullable=True)  # JSON string of message history
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ClassSchedule(Base):
+    __tablename__ = "class_schedules"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    class_name = Column(String, nullable=False)
+    day_of_week = Column(Integer, nullable=False)   # 0=Monday … 6=Sunday
+    start_time = Column(String, nullable=False)     # "HH:MM" 24-hour
+    end_time = Column(String, nullable=False)        # "HH:MM" 24-hour
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+
+
+class CompanyPreference(Base):
+    __tablename__ = "company_preferences"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    company_name = Column(String, nullable=False)
+    job_role = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+
+
+class Referral(Base):
+    __tablename__ = "referrals"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    company_name = Column(String, nullable=False)
+    contact_name = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=True)  # which event led to this
+    received_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    event = relationship("Event")
+
+
+class DirectMessage(Base):
+    __tablename__ = "direct_messages"
+    id = Column(Integer, primary_key=True, index=True)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    is_ai_generated = Column(Boolean, default=False)
+    read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    sender = relationship("User", foreign_keys=[sender_id])
+    receiver = relationship("User", foreign_keys=[receiver_id])

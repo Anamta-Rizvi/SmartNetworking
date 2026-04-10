@@ -89,8 +89,19 @@ export interface SuggestedUser extends ConnectionUser {
   connection_weight?: number;
 }
 
+export interface RecentlyAccepted {
+  connection_id: number;
+  peer_id: number;
+  peer_name: string;
+  accepted_at: string;
+}
+
 export async function getSuggestions(userId: number): Promise<SuggestedUser[]> {
   return apiFetch<SuggestedUser[]>(`/connections/${userId}/suggestions`);
+}
+
+export async function getRecentlyAccepted(userId: number, minutes = 2): Promise<RecentlyAccepted[]> {
+  return apiFetch<RecentlyAccepted[]>(`/connections/${userId}/recently-accepted?minutes=${minutes}`);
 }
 
 export async function fetchEventAttendees(eventId: number, userId: number): Promise<RSVPAttendeeOut[]> {

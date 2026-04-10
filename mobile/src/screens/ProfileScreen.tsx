@@ -1,9 +1,10 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert,
+  Modal, TextInput,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../constants/colors';
 import { TagChip } from '../components/TagChip';
@@ -15,6 +16,256 @@ import { getConnections, getPendingRequests } from '../api/connections';
 import { uploadAvatar } from '../api/uploads';
 import { useStore } from '../store/useStore';
 import { API_BASE } from '../api/client';
+import { getSchedule, addClass, deleteClass, ClassSlot, DAY_NAMES } from '../api/schedule';
+import { getCompanyPreferences, addCompanyPreference, deleteCompanyPreference, getSuggestedCompanies } from '../api/companies';
+
+// ─── Class Schedule Section ───────────────────────────────────────────────────
+function ClassScheduleSection({ userId }: { userId: number }) {
+  const qc = useQueryClient();
+  const [showModal, setShowModal] = useState(false);
+  const [className, setClassName] = useState('');
+  const [day, setDay] = useState(0);
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('10:30');
+
+  const { data: slots = [] } = useQuery({
+    queryKey: ['schedule', userId],
+    queryFn: () => getSchedule(userId),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: () => addClass({ user_id: userId, class_name: className, day_of_week: day, start_time: startTime, end_time: endTime }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['schedule', userId] }); setShowModal(false); setClassName(''); },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteClass(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['schedule', userId] }),
+  });
+
+  const byDay = DAY_NAMES.map((name, idx) => ({
+    name,
+    slots: slots.filter(s => s.day_of_week === idx),
+  })).filter(d => d.slots.length > 0);
+
+  return (
+    <View>
+      <View style={pref.sectionHeader}>
+        <Text style={pref.sectionTitle}>Class Schedule</Text>
+        <TouchableOpacity style={pref.addBtn} onPress={() => setShowModal(true)}>
+          <Text style={pref.addBtnText}>+ Add Class</Text>
+        </TouchableOpacity>
+      </View>
+      {byDay.length === 0 ? (
+        <Text style={pref.empty}>No classes added. Add your schedule so Copilot can suggest events around your free time.</Text>
+      ) : (
+        byDay.map(d => (
+          <View key={d.name} style={{ marginBottom: 8 }}>
+            <Text style={pref.dayLabel}>{d.name}</Text>
+            {d.slots.map(slot => (
+              <View key={slot.id} style={pref.slotRow}>
+                <Text style={pref.slotName}>{slot.class_name}</Text>
+                <Text style={pref.slotTime}>{slot.start_time}–{slot.end_time}</Text>
+                <TouchableOpacity onPress={() => deleteMutation.mutate(slot.id)}>
+                  <Text style={pref.deleteText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        ))
+      )}
+      <Modal visible={showModal} transparent animationType="slide">
+        <View style={pref.overlay}>
+          <View style={pref.sheet}>
+            <Text style={pref.modalTitle}>Add Class</Text>
+            <Text style={pref.label}>Class Name *</Text>
+            <TextInput style={pref.input} value={className} onChangeText={setClassName} placeholder="e.g. Algorithms" placeholderTextColor={Colors.muted} />
+            <Text style={pref.label}>Day</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {DAY_NAMES.map((n, i) => (
+                  <TouchableOpacity key={i} style={[pref.dayChip, day === i && pref.dayChipActive]} onPress={() => setDay(i)}>
+                    <Text style={[pref.dayChipText, day === i && { color: Colors.white }]}>{n.slice(0, 3)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={pref.label}>Start (HH:MM)</Text>
+                <TextInput style={pref.input} value={startTime} onChangeText={setStartTime} placeholder="09:00" placeholderTextColor={Colors.muted} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={pref.label}>End (HH:MM)</Text>
+                <TextInput style={pref.input} value={endTime} onChangeText={setEndTime} placeholder="10:30" placeholderTextColor={Colors.muted} />
+              </View>
+            </View>
+            <View style={pref.btnRow}>
+              <TouchableOpacity style={pref.cancelBtn} onPress={() => setShowModal(false)}>
+                <Text style={pref.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[pref.saveBtn, !className.trim() && { opacity: 0.4 }]}
+                disabled={!className.trim()}
+                onPress={() => addMutation.mutate()}
+              >
+                <Text style={pref.saveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+// ─── Company Preferences Section ──────────────────────────────────────────────
+function CompanyPreferencesSection({ userId }: { userId: number }) {
+  const qc = useQueryClient();
+  const [showModal, setShowModal] = useState(false);
+  const [companyName, setCompanyName] = useState('');
+  const [jobRole, setJobRole] = useState('');
+
+  const { data: prefs = [] } = useQuery({
+    queryKey: ['company-prefs', userId],
+    queryFn: () => getCompanyPreferences(userId),
+  });
+
+  const { data: suggestions } = useQuery({
+    queryKey: ['company-suggestions', userId],
+    queryFn: () => getSuggestedCompanies(userId),
+    enabled: prefs.length > 0,
+  });
+
+  const addMutation = useMutation({
+    mutationFn: () => addCompanyPreference(userId, companyName, jobRole || undefined),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['company-prefs', userId] });
+      qc.invalidateQueries({ queryKey: ['company-suggestions', userId] });
+      setShowModal(false);
+      setCompanyName('');
+      setJobRole('');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteCompanyPreference(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['company-prefs', userId] });
+      qc.invalidateQueries({ queryKey: ['company-suggestions', userId] });
+    },
+  });
+
+  return (
+    <View>
+      <View style={pref.sectionHeader}>
+        <Text style={pref.sectionTitle}>Target Companies</Text>
+        <TouchableOpacity style={pref.addBtn} onPress={() => setShowModal(true)}>
+          <Text style={pref.addBtnText}>+ Add</Text>
+        </TouchableOpacity>
+      </View>
+      {prefs.length === 0 ? (
+        <Text style={pref.empty}>Add companies you're targeting. Copilot will prioritize events and connections from these companies.</Text>
+      ) : (
+        <View style={{ gap: 8 }}>
+          {prefs.map(p => (
+            <View key={p.id} style={pref.companyRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={pref.companyName}>{p.company_name}</Text>
+                {p.job_role ? <Text style={pref.companyRole}>{p.job_role}</Text> : null}
+              </View>
+              <TouchableOpacity onPress={() => deleteMutation.mutate(p.id)}>
+                <Text style={pref.deleteText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+      {suggestions?.suggestions && suggestions.suggestions.length > 0 && (
+        <View style={{ marginTop: 12 }}>
+          <Text style={pref.aiSuggestHeader}>AI also suggests</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+            {suggestions.suggestions.slice(0, 6).map((s, i) => (
+              <TouchableOpacity
+                key={i}
+                style={pref.suggestChip}
+                onPress={() => {
+                  setCompanyName(s);
+                  setShowModal(true);
+                }}
+              >
+                <Text style={pref.suggestChipText}>+ {s}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+      <Modal visible={showModal} transparent animationType="slide">
+        <View style={pref.overlay}>
+          <View style={pref.sheet}>
+            <Text style={pref.modalTitle}>Add Target Company</Text>
+            <Text style={pref.label}>Company Name *</Text>
+            <TextInput style={pref.input} value={companyName} onChangeText={setCompanyName} placeholder="e.g. Google" placeholderTextColor={Colors.muted} />
+            <Text style={pref.label}>Job Role / Function (optional)</Text>
+            <TextInput style={pref.input} value={jobRole} onChangeText={setJobRole} placeholder="e.g. Software Engineer" placeholderTextColor={Colors.muted} />
+            <View style={pref.btnRow}>
+              <TouchableOpacity style={pref.cancelBtn} onPress={() => setShowModal(false)}>
+                <Text style={pref.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[pref.saveBtn, !companyName.trim() && { opacity: 0.4 }]}
+                disabled={!companyName.trim()}
+                onPress={() => addMutation.mutate()}
+              >
+                <Text style={pref.saveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const pref = StyleSheet.create({
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  sectionTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' },
+  addBtn: { backgroundColor: Colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  addBtnText: { color: Colors.white, fontSize: 13, fontWeight: '700' },
+  empty: { color: Colors.muted, fontSize: 13, lineHeight: 18 },
+  dayLabel: { color: Colors.subtext, fontSize: 12, fontWeight: '700', marginBottom: 4, textTransform: 'uppercase' },
+  slotRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: Colors.card, borderRadius: 10, padding: 10, marginBottom: 6,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  slotName: { flex: 1, color: Colors.text, fontSize: 14, fontWeight: '600' },
+  slotTime: { color: Colors.subtext, fontSize: 12 },
+  deleteText: { color: Colors.muted, fontSize: 16, paddingLeft: 4 },
+  overlay: { flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: Colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 },
+  modalTitle: { color: Colors.text, fontSize: 18, fontWeight: '700', marginBottom: 16 },
+  label: { color: Colors.subtext, fontSize: 13, marginBottom: 4, marginTop: 10 },
+  input: { backgroundColor: Colors.surface, borderRadius: 10, padding: 12, color: Colors.text, fontSize: 14, borderWidth: 1, borderColor: Colors.border },
+  dayChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  dayChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  dayChipText: { color: Colors.subtext, fontSize: 13, fontWeight: '600' },
+  btnRow: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  cancelBtn: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: Colors.surface, alignItems: 'center' },
+  cancelText: { color: Colors.subtext, fontWeight: '600' },
+  saveBtn: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: Colors.primary, alignItems: 'center' },
+  saveText: { color: Colors.white, fontWeight: '700' },
+  companyRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.card, borderRadius: 10, padding: 12,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  companyName: { color: Colors.text, fontSize: 14, fontWeight: '600' },
+  companyRole: { color: Colors.subtext, fontSize: 12, marginTop: 2 },
+  aiSuggestHeader: { color: Colors.subtext, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  suggestChip: { backgroundColor: Colors.primary + '18', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: Colors.primary + '55' },
+  suggestChipText: { color: Colors.primaryLight, fontSize: 13, fontWeight: '600' },
+});
 
 const GOAL_TYPE_LABEL: Record<string, string> = {
   career: '💼 Career',
@@ -181,11 +432,7 @@ export function ProfileScreen({ navigation }: any) {
         )}
 
         {dashboard && (
-          <TouchableOpacity
-            style={styles.section}
-            onPress={() => navigation.navigate('GoalDashboard')}
-            activeOpacity={0.8}
-          >
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>Goal Progress</Text>
             <View style={styles.progressCard}>
               {['career', 'both'].includes(dashboard.primary_type) && (
@@ -206,9 +453,16 @@ export function ProfileScreen({ navigation }: any) {
                   <Text style={styles.progressPct}>{Math.round(dashboard.social_progress * 100)}%</Text>
                 </View>
               )}
-              <Text style={styles.progressLink}>View full dashboard →</Text>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
+                <TouchableOpacity onPress={() => navigation.navigate('GoalDashboard')}>
+                  <Text style={styles.progressLink}>Dashboard →</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigation.navigate('Progress')}>
+                  <Text style={[styles.progressLink, { color: Colors.success }]}>Progress & Referrals →</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </TouchableOpacity>
+          </View>
         )}
 
         {interests.length > 0 && (
@@ -259,6 +513,20 @@ export function ProfileScreen({ navigation }: any) {
           <Text style={styles.sectionTitle}>Upcoming RSVPs</Text>
           {userId && <UpcomingRSVPs userId={userId} navigation={navigation} />}
         </View>
+
+        {/* Class Schedule */}
+        {userId && (
+          <View style={styles.section}>
+            <ClassScheduleSection userId={userId} />
+          </View>
+        )}
+
+        {/* Company Preferences */}
+        {userId && (
+          <View style={styles.section}>
+            <CompanyPreferencesSection userId={userId} />
+          </View>
+        )}
 
         <TouchableOpacity
           style={styles.logoutBtn}
